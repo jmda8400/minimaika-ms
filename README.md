@@ -70,3 +70,23 @@ docker compose exec app php artisan minimaika:knowledge-test "pregunta"
 ```
 
 Actualmente no se usa base de datos para esta base de conocimiento.
+
+## Pruebas manuales del chat
+
+Ejecutar:
+
+```bash
+docker compose exec app php artisan minimaika:chat
+```
+
+Mensajes sugeridos para validar intenciones y derivación a base de conocimiento:
+
+- Hola
+- ¿Cómo estás?
+- Tengo una reserva
+- Quiero reservar
+- ¿Dónde queda el refugio?
+- ¿Se puede acampar?
+- ¿Hay wifi?
+- Gracias
+- Chau

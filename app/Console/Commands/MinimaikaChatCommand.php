@@ -18,7 +18,7 @@ class MinimaikaChatCommand extends Command
 
     public function handle(): int
     {
-        $this->info('Bienvenido a Minimaika. Escribí tu pregunta (salir/exit/quit para terminar).');
+        $this->info('Asistente virtual del Refugio Agostino Rocca. Escribí tu pregunta (salir/exit/quit para terminar).');
 
         while (true) {
             $question = trim((string) $this->ask('>'));
