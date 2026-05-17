@@ -1,0 +1,136 @@
+<?php
+
+namespace App\Services\Bot;
+
+class IntentDetectorService
+{
+    /**
+     * @return array{intent:string,response:?string,use_rag:bool,show_auto_source:bool,prepend_response:?string}|null
+     */
+    public function detect(string $message): ?array
+    {
+        $normalized = $this->normalize($message);
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        if ($this->matchesAny($normalized, ['chau', 'adios', 'nos vemos', 'hasta luego', 'gracias chau', 'salir'])) {
+            return [
+                'intent' => 'despedida',
+                'response' => '¡Gracias por comunicarte con el Refugio Agostino Rocca! Que tengas una excelente jornada de montaña.',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['muchas gracias', 'perfecto gracias', 'ok gracias', 'genial gracias', 'gracias'])) {
+            return [
+                'intent' => 'agradecimiento',
+                'response' => '¡De nada! Si necesitás algo más sobre el refugio, reservas, acceso o caminatas, escribime.',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['hola', 'buenas', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'como estas'])) {
+            return [
+                'intent' => 'saludo',
+                'response' => '¡Hola! Te comunicaste con el asistente virtual del Refugio Agostino Rocca. Puedo ayudarte con reservas, ubicación, acceso, horarios, servicios, caminatas, pagos y preguntas frecuentes. ¿En qué puedo ayudarte?',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['tengo una reserva', 'quiero reservar', 'hacer reserva', 'reservar', 'mi reserva', 'modificar reserva', 'cancelar reserva', 'reserva para', 'reservar alojamiento'])) {
+            return [
+                'intent' => 'reserva',
+                'response' => 'Para alojarte en el Refugio Agostino Rocca es obligatorio contar con reserva previa. La reserva se realiza desde el motor de reservas de la web oficial. Puedo ayudarte con información sobre pagos, fechas, pernocte, servicios o políticas de reserva.',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['precio', 'precios', 'tarifa', 'tarifas', 'cuanto cuesta', 'valor', 'pernocte', 'comida', 'ducha'])) {
+            return [
+                'intent' => 'precio_tarifas',
+                'response' => null,
+                'use_rag' => true,
+                'show_auto_source' => false,
+                'prepend_response' => 'Los valores de pernocte, comidas y servicios deben consultarse en la sección de tarifas de la web oficial del refugio. No tengo permitido inventar precios. También puedo contarte qué servicios tienen costo aparte, como la ducha.',
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['donde queda', 'ubicacion', 'como llegar', 'pampa linda', 'camino', 'senda', 'acceso'])) {
+            return [
+                'intent' => 'ubicacion_acceso',
+                'response' => null,
+                'use_rag' => true,
+                'show_auto_source' => false,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['wifi', 'wi fi', 'internet', 'senal', 'celular', 'telefono'])) {
+            return [
+                'intent' => 'senal_wifi',
+                'response' => 'En el refugio no hay señal de teléfono ni WiFi.',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['acampar', 'acampe', 'carpa', 'camping'])) {
+            return [
+                'intent' => 'acampe',
+                'response' => 'No está permitido acampar en la zona del refugio ni en el Paso de las Nubes. Parques Nacionales prohibió el acampe en esa zona desde enero de 2023.',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->looksConversational($normalized)) {
+            return [
+                'intent' => 'fallback_conversacional',
+                'response' => 'Puedo ayudarte con información sobre reservas, ubicación, acceso desde Pampa Linda, horarios del camino, servicios, pagos, caminatas y preguntas frecuentes del Refugio Agostino Rocca.',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        return null;
+    }
+
+    private function normalize(string $text): string
+    {
+        $text = mb_strtolower(trim($text));
+        $text = strtr($text, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u']);
+        $text = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? '';
+
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
+    }
+
+    /** @param array<int,string> $needles */
+    private function matchesAny(string $haystack, array $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if (str_contains($haystack, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function looksConversational(string $text): bool
+    {
+        return $this->matchesAny($text, ['hola', 'buen', 'gracias', 'chau', 'adios', 'como estas', 'que tal', 'necesito', 'quiero', 'ayuda', 'consulta']);
+    }
+}
