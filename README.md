@@ -56,3 +56,17 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Base de conocimiento de Minimaika MS
+
+La base de conocimiento real del bot se edita en archivos Markdown simples dentro de:
+
+- `storage/knowledge`
+
+El comando de prueba para validar recuperación por coincidencia de palabras es:
+
+```bash
+docker compose exec app php artisan minimaika:knowledge-test "pregunta"
+```
+
+Actualmente no se usa base de datos para esta base de conocimiento.
