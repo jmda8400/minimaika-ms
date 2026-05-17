@@ -18,6 +18,8 @@ class MinimaikaChatCommand extends Command
 
     public function handle(): int
     {
+        $showSources = filter_var(env('RAG_SHOW_SOURCES', false), FILTER_VALIDATE_BOOL);
+
         $this->info('Asistente virtual del Refugio Agostino Rocca. Escribí tu pregunta (salir/exit/quit para terminar).');
 
         while (true) {
@@ -41,14 +43,16 @@ class MinimaikaChatCommand extends Command
             $this->info('Respuesta:');
             $this->line($result['answer']);
 
-            $this->line('');
-            $this->info('Fuentes usadas:');
+            if ($showSources) {
+                $this->line('');
+                $this->info('Fuentes usadas (debug):');
 
-            if ($result['sources'] === []) {
-                $this->line('- (sin fuentes)');
-            } else {
-                foreach ($result['sources'] as $source) {
-                    $this->line('- '.$source);
+                if ($result['sources'] === []) {
+                    $this->line('- (sin fuentes)');
+                } else {
+                    foreach ($result['sources'] as $source) {
+                        $this->line('- '.$source);
+                    }
                 }
             }
 
