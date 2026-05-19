@@ -15,8 +15,10 @@ class RagBotService
     private const MAX_HISTORY_ITEMS = 5;
     private const MIN_HISTORY_ITEMS = 3;
     private const FALLBACK_MESSAGE = 'No tengo esa información confirmada en la base de conocimiento del refugio. Te recomiendo consultar directamente con el refugio para evitar darte un dato incorrecto.';
+    private const RESERVATION_GUIDANCE = 'Entiendo. Para ayudarte con eso necesito que tengas a mano el código de reserva o los datos con los que hiciste la reserva. Con eso se puede revisar el caso y ver si corresponde cancelación, reprogramación o reembolso según las condiciones vigentes.';
+    private const RESCHEDULE_LINK = 'https://www.refugioagostinorocca.com/reschedule';
 
-    private const SYSTEM_PROMPT = 'Eres el asistente virtual del Refugio Agostino Rocca. Respondés consultas de visitantes por WhatsApp. Tu estilo debe ser claro, amable, natural y breve. Usá únicamente la información provista en el contexto de la base de conocimiento. No inventes datos. Si la información no está en el contexto, decí que no tenés ese dato confirmado y sugerí consultar con el refugio. Respondé en español claro y cordial. No pegues fragmentos textuales largos. Resumí y explicá de forma conversacional. La respuesta debe tener entre 80 y 150 palabras como máximo, salvo que el usuario pida más detalle.';
+    private const SYSTEM_PROMPT = 'Eres el asistente virtual del Refugio Agostino Rocca. Respondés consultas por WhatsApp en español, breve, claro y directo. No saludes en cada respuesta: solo saluda si el usuario saluda o si es el primer mensaje de la conversación. Usá únicamente información del contexto e historial provistos. Si falta un dato para avanzar, pedilo de forma concreta. No inventes datos ni condiciones. No uses frases genéricas como "puedo ayudarte con información sobre...". Si el usuario pide cancelación, reprogramación, reembolso o temas de reserva, orientá al siguiente paso concreto. Si la consulta actual es aclaración/seguimiento, interpretala con el historial y reformulá más simple sin repetir todo. Máximo 120 palabras, salvo que el usuario pida detalle.';
 
     /** @var array<int,array{question:string,answer:string}> */
     private array $history = [];
@@ -33,7 +35,34 @@ class RagBotService
         Log::info('Pregunta recibida en bot RAG.', ['question' => $question]);
 
         $intent = $this->intentDetectorService->detect($question);
+        Log::info('Intent detectado.', ['intent' => $intent['intent'] ?? 'none']);
+
+        if ($intent !== null && in_array($intent['intent'], ['cancel_reservation', 'refund_request'], true)) {
+            Log::info('Se usó respuesta local por intent.', ['intent' => $intent['intent']]);
+
+            return $this->finalizeResponse($question, self::RESERVATION_GUIDANCE, [], 'intent', '', ['respuesta automática']);
+        }
+
+        if ($intent !== null && $intent['intent'] === 'reschedule_reservation') {
+            Log::info('Se usó respuesta local por intent.', ['intent' => $intent['intent']]);
+            $answer = "Podés reprogramar tu reserva desde este enlace:\n".self::RESCHEDULE_LINK."\n\nAhí vas a poder gestionar el cambio de fecha de tu reserva. Te recomiendo tener a mano el código de reserva o los datos con los que hiciste la reserva.";
+
+            return $this->finalizeResponse($question, $answer, [], 'intent', '', ['respuesta automática']);
+        }
+
+        if ($intent !== null && $intent['intent'] === 'clarification' && $this->recentHistory() !== []) {
+            Log::info('Se usó historial para aclaración.', ['history_items' => count($this->recentHistory())]);
+            $prompt = $this->buildClarificationPrompt($question);
+            Log::info('Llamando a Groq para aclaración con historial.');
+            $answer = $this->groqChatService->generate(self::SYSTEM_PROMPT, $prompt);
+
+            if ($answer !== null) {
+                return $this->finalizeResponse($question, $answer, [], 'history', $prompt, ['historial']);
+            }
+        }
+
         if ($this->shouldAnswerLocally($intent)) {
+            Log::info('Se usó respuesta local por intent.', ['intent' => $intent['intent']]);
             return $this->finalizeResponse($question, $intent['response'], [], 'intent', '', ['respuesta automática']);
         }
 
@@ -45,7 +74,7 @@ class RagBotService
         $prompt = $this->buildPrompt($question, $fragments);
 
         if ($fragments === []) {
-            Log::warning('Se usó fallback por falta de fragmentos relevantes.');
+            Log::warning('Se usó fallback por falta de fragmentos relevantes.', ['fallback_reason' => 'no_fragments']);
 
             return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, [], 'rag', $prompt, []);
         }
@@ -116,12 +145,32 @@ class RagBotService
             ."Historial reciente:\n{$historyText}\n\n"
             ."Contexto recuperado de la base de conocimiento:\n".implode("\n\n", $contextLines)."\n\n"
             ."Instrucciones:\n"
+            ."- Si la pregunta actual es una aclaración o seguimiento, interpretala usando el historial reciente.\n"
             ."- Respondé solamente usando el contexto.\n"
             ."- Si no hay información suficiente, decí que no tenés ese dato confirmado.\n"
             ."- No inventes horarios, precios, distancias, disponibilidad, servicios ni condiciones.\n"
             ."- No menciones \"según el fragmento\" ni \"según la base de conocimiento\".\n"
             ."- Respondé de forma natural, como si estuvieras contestando por WhatsApp.\n"
-            ."- Máximo 150 palabras.";
+            ."- Si en el contexto aparece un enlace de reprogramación, incluilo cuando corresponda.\n"
+            ."- Máximo 120 palabras.";
+    }
+
+    private function buildClarificationPrompt(string $question): string
+    {
+        $history = $this->recentHistory();
+        $historyText = implode("\n", array_map(
+            static fn (array $item): string => "Usuario: {$item['question']}\nBot: {$item['answer']}",
+            $history
+        ));
+
+        return "Pregunta actual del usuario:\n{$question}\n\n"
+            ."Historial reciente:\n{$historyText}\n\n"
+            ."Instrucciones:\n"
+            ."- Si la pregunta actual es una aclaración o seguimiento, interpretala usando el historial reciente.\n"
+            ."- Reformulá la última explicación de forma más simple y concreta.\n"
+            ."- No repitas toda la respuesta anterior si no hace falta.\n"
+            ."- Si el tema es acceso, separá: Bariloche → Pampa Linda y Pampa Linda → Refugio.\n"
+            ."- Máximo 120 palabras.";
     }
 
     private function resolveTopK(?int $limit): int
