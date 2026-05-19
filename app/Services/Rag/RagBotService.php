@@ -33,7 +33,7 @@ class RagBotService
         Log::info('Pregunta recibida en bot RAG.', ['question' => $question]);
 
         $intent = $this->intentDetectorService->detect($question);
-        if ($intent !== null && $intent['use_rag'] === false && $intent['response'] !== null) {
+        if ($this->shouldAnswerLocally($intent)) {
             return $this->finalizeResponse($question, $intent['response'], [], 'intent', '', ['respuesta automática']);
         }
 
@@ -66,6 +66,16 @@ class RagBotService
         }
 
         return $this->finalizeResponse($question, $answer, $fragments, 'rag', $prompt, $this->sourcesFromFragments($fragments));
+    }
+
+
+    private function shouldAnswerLocally(?array $intent): bool
+    {
+        if ($intent === null || $intent['response'] === null) {
+            return false;
+        }
+
+        return in_array($intent['intent'], ['saludo', 'despedida', 'agradecimiento', 'fallback_conversacional'], true);
     }
 
     private function finalizeResponse(string $question, string $answer, array $fragments, string $sourceType, string $prompt, array $sources): array
