@@ -1,0 +1,30 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: minimaika_app
+    working_dir: /var/www/html
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "8001:8000"
+    depends_on:
+      - mysql
+    command: php artisan serve --host=0.0.0.0 --port=8000
+
+  mysql:
+    image: mysql:8.0
+    container_name: minimaika_mysql
+    environment:
+      MYSQL_DATABASE: minimaika
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: minimaika
+      MYSQL_PASSWORD: minimaika
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:
