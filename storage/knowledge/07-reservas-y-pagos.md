@@ -7,6 +7,12 @@ La reserva se realiza desde el motor de reservas de la web oficial del refugio.
 
 Para reservar, hay que hacer clic en el botón de reservar del inicio de la web y seguir los pasos indicados por el sistema.
 
+## Reprogramación de reservas
+La reprogramación de reservas se gestiona desde este enlace oficial:
+https://www.refugioagostinorocca.com/reschedule
+
+Para reprogramar, conviene tener a mano el código de reserva o los datos con los que se hizo la reserva.
+
 ## Formas de pago
 La reserva puede pagarse en el motor de reservas con Mercado Pago.
 

@@ -45,6 +45,46 @@ class IntentDetectorService
             ];
         }
 
+        if ($this->matchesAny($normalized, ['cancelar reserva', 'dar de baja reserva', 'anular reserva', 'no voy a ir', 'quiero cancelar'])) {
+            return [
+                'intent' => 'cancel_reservation',
+                'response' => null,
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['reprogramar', 'cambiar fecha', 'modificar reserva', 'cambiar mi reserva', 'mover la reserva', 'no puedo ir en esa fecha', 'quiero ir otro dia'])) {
+            return [
+                'intent' => 'reschedule_reservation',
+                'response' => null,
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['reembolso', 'devolucion', 'devolver plata', 'reintegro', 'me devuelven'])) {
+            return [
+                'intent' => 'refund_request',
+                'response' => null,
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['no entiendo', 'no me quedo claro', 'explicame mejor', 'la verdad no entiendo', 'podes aclarar'])) {
+            return [
+                'intent' => 'clarification',
+                'response' => null,
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
         if ($this->matchesAny($normalized, ['tengo una reserva', 'quiero reservar', 'hacer reserva', 'reservar', 'mi reserva', 'modificar reserva', 'cancelar reserva', 'reserva para', 'reservar alojamiento'])) {
             return [
                 'intent' => 'reserva',
