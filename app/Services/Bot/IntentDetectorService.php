@@ -88,9 +88,9 @@ class IntentDetectorService
         if ($this->matchesAny($normalized, ['acampar', 'acampe', 'carpa', 'camping'])) {
             return [
                 'intent' => 'acampe',
-                'response' => 'No está permitido acampar en la zona del refugio ni en el Paso de las Nubes. Parques Nacionales prohibió el acampe en esa zona desde enero de 2023.',
-                'use_rag' => false,
-                'show_auto_source' => true,
+                'response' => null,
+                'use_rag' => true,
+                'show_auto_source' => false,
                 'prepend_response' => null,
             ];
         }
