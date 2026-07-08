@@ -1,6 +1,20 @@
 # Integración WhatsApp Web con QR
 
-Esta integración evita agregar un puente Node.js dentro de Laravel. Laravel se conecta por HTTP a un gateway compatible con WhatsApp Web por QR (por ejemplo, Evolution API u otro servicio equivalente) y expone endpoints públicos bajo la raíz:
+Esta integración evita agregar un puente Node.js dentro de Laravel. Laravel se conecta por HTTP a un gateway compatible con WhatsApp Web por QR (por ejemplo, Evolution API u otro servicio equivalente) y expone endpoints bajo la URL configurada en `APP_URL`.
+
+Para probar primero en local, usar:
+
+```env
+APP_URL=http://localhost:8001
+```
+
+Con esa URL, los endpoints quedan:
+
+- `http://localhost:8001/whatsapp/qr`
+- `http://localhost:8001/whatsapp/status`
+- `http://localhost:8001/whatsapp/webhook`
+
+En producción, al cambiar `APP_URL=https://bot.refugioagostinorocca.com`, las mismas rutas pasan a:
 
 - `https://bot.refugioagostinorocca.com/whatsapp/qr`
 - `https://bot.refugioagostinorocca.com/whatsapp/status`
@@ -9,7 +23,8 @@ Esta integración evita agregar un puente Node.js dentro de Laravel. Laravel se 
 ## Variables de entorno
 
 ```env
-WHATSAPP_WEB_BASE_URL=https://gateway.example.com
+APP_URL=http://localhost:8001
+WHATSAPP_WEB_BASE_URL=http://localhost:8080
 WHATSAPP_WEB_API_KEY=secret
 WHATSAPP_WEB_INSTANCE=refugio-agostino-rocca
 WHATSAPP_WEB_WEBHOOK_SECRET=otro-secret-opcional
@@ -18,16 +33,21 @@ WHATSAPP_WEB_TIMEOUT=15
 
 `WHATSAPP_WEB_WEBHOOK_SECRET` es opcional. Si se configura, el gateway debe enviar el mismo valor en el header `X-Webhook-Secret` cuando llame a `/whatsapp/webhook`.
 
-## Flujo de conexión
+## Flujo local
 
-1. Configurar el gateway con la instancia definida en `WHATSAPP_WEB_INSTANCE`.
-2. Configurar en el gateway el webhook público:
-   `https://bot.refugioagostinorocca.com/whatsapp/webhook`.
-3. Abrir `https://bot.refugioagostinorocca.com/whatsapp/qr` en el navegador.
-4. Escanear el QR desde WhatsApp en el celular, entrando a **Dispositivos vinculados**.
-5. Revisar `https://bot.refugioagostinorocca.com/whatsapp/status` para confirmar el estado de conexión.
+1. Levantar Laravel en Docker Compose; el servicio publica la app en `http://localhost:8001`.
+2. Levantar o configurar el gateway compatible con WhatsApp Web por QR y apuntar `WHATSAPP_WEB_BASE_URL` a su URL HTTP.
+3. Configurar en el gateway el webhook local:
+   `http://localhost:8001/whatsapp/webhook`.
+4. Abrir `http://localhost:8001/whatsapp/qr` en el navegador.
+5. Escanear el QR desde WhatsApp en el celular, entrando a **Dispositivos vinculados**.
+6. Revisar `http://localhost:8001/whatsapp/status` para confirmar el estado de conexión.
 
 Cuando llega un mensaje entrante, Laravel extrae el texto del payload, llama a `App\Services\Rag\RagBotService` y responde por el gateway usando el número remoto.
+
+## Nota sobre webhooks locales
+
+`http://localhost:8001/whatsapp/webhook` sirve si el gateway corre en la misma máquina o tiene acceso a ese host. Si el gateway corre fuera de tu computadora, no va a poder llamar a `localhost`; en ese caso hay que usar una URL pública temporal, por ejemplo un túnel HTTPS, y poner esa URL en `APP_URL` mientras dure la prueba.
 
 ## Notas
 

@@ -63,7 +63,7 @@ class WhatsAppWebhookController extends Controller
         $qrImage = (string) (data_get($payload, 'base64') ?? data_get($payload, 'qrcode.base64') ?? '');
         $pairingCode = (string) (data_get($payload, 'code') ?? data_get($payload, 'pairingCode') ?? '');
 
-        return response($this->renderQrPage($qrImage, $pairingCode));
+        return response($this->renderQrPage($qrImage, $pairingCode, route('whatsapp.webhook')));
     }
 
     /**
@@ -92,7 +92,7 @@ class WhatsAppWebhookController extends Controller
         ];
     }
 
-    private function renderQrPage(string $qrImage, string $pairingCode): string
+    private function renderQrPage(string $qrImage, string $pairingCode, string $webhookUrl): string
     {
         $qrMarkup = $qrImage !== ''
             ? '<img class="qr" src="'.e($qrImage).'" alt="Código QR de WhatsApp">'
@@ -100,6 +100,8 @@ class WhatsAppWebhookController extends Controller
         $codeMarkup = $pairingCode !== ''
             ? '<p class="muted">Código:</p><p class="code">'.e($pairingCode).'</p>'
             : '';
+
+        $safeWebhookUrl = e($webhookUrl);
 
         return <<<HTML
 <!doctype html>
@@ -117,7 +119,7 @@ class WhatsAppWebhookController extends Controller
         <p class="muted">Abrí WhatsApp en el celular, entrá a Dispositivos vinculados y escaneá este código.</p>
         {$qrMarkup}
         {$codeMarkup}
-        <p class="muted">URL del webhook: <strong>https://bot.refugioagostinorocca.com/whatsapp/webhook</strong></p>
+        <p class="muted">URL del webhook: <strong>{$safeWebhookUrl}</strong></p>
     </main>
 </body>
 </html>
