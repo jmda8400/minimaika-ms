@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\WhatsApp;
 
 use App\Http\Controllers\Controller;
+use App\Services\Bot\BotSettingsService;
 use App\Services\Rag\RagBotService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
 use Illuminate\Http\JsonResponse;
@@ -16,6 +17,7 @@ class WhatsAppWebhookController extends Controller
     public function __construct(
         private readonly RagBotService $ragBotService,
         private readonly WhatsAppGatewayService $whatsAppGatewayService,
+        private readonly BotSettingsService $settingsService,
     ) {
     }
 
@@ -26,14 +28,18 @@ class WhatsAppWebhookController extends Controller
         }
 
         $payload = $request->all();
-        $message = $this->extractIncomingMessage($payload);
+        $settings = $this->settingsService->get();
+        $message = $this->extractIncomingMessage($payload, $settings['respond_to_groups']);
 
         if ($message === null) {
             return response()->json(['status' => 'ignored']);
         }
 
         try {
-            $answer = $this->ragBotService->answer($message['text'])['answer'];
+            $answer = $settings['response_mode'] === 'default'
+                ? $settings['default_message']
+                : $this->ragBotService->answer($message['text'])['answer'];
+
             $this->whatsAppGatewayService->sendText($message['phone'], $answer);
 
             return response()->json(['status' => 'sent']);
@@ -68,9 +74,9 @@ class WhatsAppWebhookController extends Controller
 
     /**
      * @param array<string,mixed> $payload
-     * @return array{phone:string,text:string}|null
+     * @return array{phone:string,text:string,is_group:bool}|null
      */
-    private function extractIncomingMessage(array $payload): ?array
+    private function extractIncomingMessage(array $payload, bool $respondToGroups): ?array
     {
         $fromMe = (bool) data_get($payload, 'data.key.fromMe', false);
         $remoteJid = (string) data_get($payload, 'data.key.remoteJid', '');
@@ -82,13 +88,16 @@ class WhatsAppWebhookController extends Controller
             ?? ''
         ));
 
-        if ($fromMe || $text === '' || $remoteJid === '' || str_ends_with($remoteJid, '@g.us')) {
+        $isGroup = str_ends_with($remoteJid, '@g.us');
+
+        if ($fromMe || $text === '' || $remoteJid === '' || ($isGroup && ! $respondToGroups)) {
             return null;
         }
 
         return [
-            'phone' => preg_replace('/\D+/', '', $remoteJid) ?? $remoteJid,
+            'phone' => $isGroup ? $remoteJid : (preg_replace('/\D+/', '', $remoteJid) ?? $remoteJid),
             'text' => $text,
+            'is_group' => $isGroup,
         ];
     }
 
