@@ -4,20 +4,25 @@ namespace App\Http\Controllers\Bot;
 
 use App\Http\Controllers\Controller;
 use App\Services\Bot\BotSettingsService;
+use App\Services\WhatsApp\WhatsAppGatewayService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Throwable;
 
 class BotSettingsController extends Controller
 {
-    public function __construct(private readonly BotSettingsService $settingsService)
-    {
+    public function __construct(
+        private readonly BotSettingsService $settingsService,
+        private readonly WhatsAppGatewayService $whatsAppGatewayService,
+    ) {
     }
 
     public function edit(): View
     {
         return view('bot.settings', [
             'settings' => $this->settingsService->get(),
+            'whatsAppStatus' => $this->whatsAppStatus(),
         ]);
     }
 
@@ -36,5 +41,28 @@ class BotSettingsController extends Controller
         ]);
 
         return redirect()->route('bot.settings.edit')->with('status', 'Configuración guardada.');
+    }
+
+    /**
+     * @return array{available:bool,label:string,detail:string|null}
+     */
+    private function whatsAppStatus(): array
+    {
+        try {
+            $payload = $this->whatsAppGatewayService->status();
+            $state = strtolower((string) (data_get($payload, 'instance.state') ?? data_get($payload, 'state') ?? data_get($payload, 'status') ?? ''));
+
+            return [
+                'available' => true,
+                'label' => in_array($state, ['open', 'connected', 'online'], true) ? 'Conectado' : 'No conectado',
+                'detail' => $state !== '' ? $state : 'Sin estado informado',
+            ];
+        } catch (Throwable) {
+            return [
+                'available' => false,
+                'label' => 'Estado no disponible',
+                'detail' => 'No se pudo consultar el gateway de WhatsApp.',
+            ];
+        }
     }
 }

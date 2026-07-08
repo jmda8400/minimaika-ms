@@ -35,6 +35,48 @@ class BotSettingsTest extends TestCase
         $this->assertTrue($settings['respond_to_groups']);
     }
 
+
+    public function test_settings_page_lives_under_whatsapp_and_shows_status(): void
+    {
+        Storage::fake('local');
+
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'open']]);
+        });
+
+        $this->get('/whatsapp/settings')
+            ->assertOk()
+            ->assertSee('WhatsApp Admin')
+            ->assertSee('Conectado')
+            ->assertSee('/whatsapp/qr')
+            ->assertSee('/whatsapp/status');
+    }
+
+    public function test_qr_page_redirects_to_settings_when_whatsapp_is_connected(): void
+    {
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'open']]);
+            $mock->shouldNotReceive('qr');
+        });
+
+        $this->get('/whatsapp/qr')
+            ->assertRedirect(route('bot.settings.edit'));
+    }
+
+    public function test_qr_page_has_navigation_header_when_whatsapp_is_not_connected(): void
+    {
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'close']]);
+            $mock->shouldReceive('qr')->once()->andReturn(['base64' => 'data:image/png;base64,abc']);
+        });
+
+        $this->get('/whatsapp/qr')
+            ->assertOk()
+            ->assertSee('WhatsApp Admin')
+            ->assertSee('/whatsapp/settings')
+            ->assertSee('/whatsapp/status');
+    }
+
     public function test_webhook_uses_default_message_when_configured(): void
     {
         Storage::fake('local');
