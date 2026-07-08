@@ -15,7 +15,9 @@ return Application::configure(basePath: dirname(__DIR__))
         App\Console\Commands\MinimaikaKnowledgeTestCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->validateCsrfTokens(except: [
+            'whatsapp/webhook',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
