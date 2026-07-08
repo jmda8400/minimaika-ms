@@ -54,8 +54,12 @@ class WhatsAppWebhookController extends Controller
         }
     }
 
-    public function status(): JsonResponse
+    public function status(Request $request): JsonResponse|RedirectResponse
     {
+        if (! $request->wantsJson()) {
+            return redirect()->route('bot.settings.edit');
+        }
+
         return response()->json($this->whatsAppGatewayService->status());
     }
 
@@ -129,9 +133,6 @@ class WhatsAppWebhookController extends Controller
 
         $safeWebhookUrl = e($webhookUrl);
         $settingsUrl = e(route('bot.settings.edit'));
-        $qrUrl = e(route('whatsapp.qr'));
-        $statusUrl = e(route('whatsapp.status'));
-
         return <<<HTML
 <!doctype html>
 <html lang="es">
@@ -140,19 +141,9 @@ class WhatsAppWebhookController extends Controller
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="refresh" content="20">
     <title>WhatsApp QR - Refugio Agostino Rocca</title>
-    <style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;min-height:100vh;margin:0;background:#f7f7f3;color:#1d1d1b}.site-header{background:#fff;border-bottom:1px solid #ece7d9}.site-header__inner{max-width:860px;margin:0 auto;padding:16px 20px;display:flex;justify-content:space-between;gap:16px;align-items:center}.brand{color:#1d1d1b;font-weight:850;text-decoration:none}.nav{display:flex;gap:8px;flex-wrap:wrap}.nav a{border:1px solid #ded7c5;border-radius:999px;color:#2f5d50;padding:8px 12px;text-decoration:none;font-weight:750}.nav a.active{background:#2f5d50;color:#fff;border-color:#2f5d50}.page{display:grid;place-items:center;padding:40px 20px}.card{background:white;border-radius:18px;box-shadow:0 12px 40px #0002;max-width:520px;padding:32px;text-align:center}.qr{max-width:320px;width:100%;height:auto}.muted{color:#666;line-height:1.5}.code{font:700 28px ui-monospace,Menlo,monospace;letter-spacing:3px}</style>
+    <style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;min-height:100vh;margin:0;background:#f7f7f3;color:#1d1d1b}.page{display:grid;place-items:center;padding:40px 20px}.card{background:white;border-radius:18px;box-shadow:0 12px 40px #0002;max-width:520px;padding:32px;text-align:center}.qr{max-width:320px;width:100%;height:auto}.muted{color:#666;line-height:1.5}.code{font:700 28px ui-monospace,Menlo,monospace;letter-spacing:3px}.link{color:#2f5d50;font-weight:700;text-decoration:none}</style>
 </head>
 <body>
-    <header class="site-header">
-        <div class="site-header__inner">
-            <a class="brand" href="{$settingsUrl}">WhatsApp Admin</a>
-            <nav class="nav" aria-label="Navegación WhatsApp">
-                <a href="{$settingsUrl}">Settings</a>
-                <a class="active" href="{$qrUrl}">QR</a>
-                <a href="{$statusUrl}">Status JSON</a>
-            </nav>
-        </div>
-    </header>
     <main class="page">
     <section class="card">
         <h1>Conectar WhatsApp</h1>
@@ -160,6 +151,7 @@ class WhatsAppWebhookController extends Controller
         {$qrMarkup}
         {$codeMarkup}
         <p class="muted">URL del webhook: <strong>{$safeWebhookUrl}</strong></p>
+        <p><a class="link" href="{$settingsUrl}">Volver a configuración</a></p>
     </section>
     </main>
 </body>

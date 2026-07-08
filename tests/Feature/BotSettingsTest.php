@@ -42,14 +42,15 @@ class BotSettingsTest extends TestCase
 
         $this->mock(WhatsAppGatewayService::class, function ($mock): void {
             $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'open']]);
+            $mock->shouldNotReceive('qr');
         });
 
         $this->get('/whatsapp/settings')
             ->assertOk()
-            ->assertSee('WhatsApp Admin')
+            ->assertDontSee('WhatsApp Admin')
             ->assertSee('Conectado')
-            ->assertSee('/whatsapp/qr')
-            ->assertSee('/whatsapp/status');
+            ->assertSee('Respuesta de /whatsapp/status')
+            ->assertSee('Olvidar sesión y pedir QR nuevo');
     }
 
     public function test_qr_page_redirects_to_settings_when_whatsapp_is_connected(): void
@@ -63,7 +64,7 @@ class BotSettingsTest extends TestCase
             ->assertRedirect(route('bot.settings.edit'));
     }
 
-    public function test_qr_page_has_navigation_header_when_whatsapp_is_not_connected(): void
+    public function test_qr_page_has_no_navigation_header_when_whatsapp_is_not_connected(): void
     {
         $this->mock(WhatsAppGatewayService::class, function ($mock): void {
             $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'close']]);
@@ -72,9 +73,41 @@ class BotSettingsTest extends TestCase
 
         $this->get('/whatsapp/qr')
             ->assertOk()
-            ->assertSee('WhatsApp Admin')
-            ->assertSee('/whatsapp/settings')
-            ->assertSee('/whatsapp/status');
+            ->assertDontSee('WhatsApp Admin')
+            ->assertDontSee('/whatsapp/status');
+    }
+
+
+    public function test_status_page_redirects_to_settings_for_browser_requests(): void
+    {
+        $this->get('/whatsapp/status')
+            ->assertRedirect(route('bot.settings.edit'));
+    }
+
+    public function test_settings_page_shows_qr_when_whatsapp_is_not_connected(): void
+    {
+        Storage::fake('local');
+
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'close']]);
+            $mock->shouldReceive('qr')->once()->andReturn(['base64' => 'data:image/png;base64,abc']);
+        });
+
+        $this->get('/whatsapp/settings')
+            ->assertOk()
+            ->assertSee('Conectar con QR')
+            ->assertSee('data:image/png;base64,abc');
+    }
+
+    public function test_forget_session_logs_out_whatsapp(): void
+    {
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('logout')->once()->andReturn(['status' => 'success']);
+        });
+
+        $this->post(route('bot.settings.forget-session'))
+            ->assertRedirect(route('bot.settings.edit'))
+            ->assertSessionHas('status', 'Sesión de WhatsApp olvidada. Escaneá un QR nuevo para volver a conectar.');
     }
 
     public function test_webhook_uses_default_message_when_configured(): void
