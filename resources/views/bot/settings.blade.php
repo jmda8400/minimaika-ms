@@ -5,15 +5,33 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Configuración del bot</title>
     <style>
-        body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f7f7f3;color:#1d1d1b}.wrap{max-width:860px;margin:0 auto;padding:40px 20px}.card{background:#fff;border-radius:20px;box-shadow:0 16px 45px #00000014;padding:32px}.eyebrow{color:#6f6a55;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px}h1{font-size:34px;line-height:1.1;margin:8px 0 12px}.intro{color:#5d5a4d;line-height:1.6;max-width:680px}.field{border-top:1px solid #ece7d9;margin-top:26px;padding-top:26px}label{display:block;font-weight:750;margin-bottom:8px}.hint{color:#706d61;font-size:14px;line-height:1.5;margin:6px 0 0}.options{display:grid;gap:12px;margin-top:14px}.option{border:1px solid #ded7c5;border-radius:14px;padding:16px;display:flex;gap:12px;align-items:flex-start}.option input{margin-top:4px}textarea{width:100%;box-sizing:border-box;border:1px solid #cbc3ae;border-radius:14px;padding:14px;min-height:150px;resize:vertical}.checkbox{display:flex;gap:12px;align-items:flex-start}.actions{display:flex;gap:12px;align-items:center;margin-top:28px}button{background:#2f5d50;color:white;border:0;border-radius:999px;padding:12px 20px;font-weight:800;cursor:pointer}.link{color:#2f5d50;text-decoration:none;font-weight:700}.alert{background:#e6f4ea;color:#24533f;border:1px solid #b8dfc7;border-radius:14px;padding:14px;margin:20px 0}.error{color:#9b1c1c;font-size:14px;margin-top:8px}.summary{background:#fbfaf6;border:1px solid #ece7d9;border-radius:16px;padding:16px;margin-top:22px}.summary strong{display:block;margin-bottom:6px}
+        body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f7f7f3;color:#1d1d1b}.wrap{max-width:860px;margin:0 auto;padding:40px 20px}.card{background:#fff;border-radius:20px;box-shadow:0 16px 45px #00000014;padding:32px}.eyebrow{color:#6f6a55;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px}h1{font-size:34px;line-height:1.1;margin:8px 0 12px}.intro{color:#5d5a4d;line-height:1.6;max-width:680px}.field{border-top:1px solid #ece7d9;margin-top:26px;padding-top:26px}label{display:block;font-weight:750;margin-bottom:8px}.hint{color:#706d61;font-size:14px;line-height:1.5;margin:6px 0 0}.options{display:grid;gap:12px;margin-top:14px}.option{border:1px solid #ded7c5;border-radius:14px;padding:16px;display:flex;gap:12px;align-items:flex-start}.option input{margin-top:4px}textarea{width:100%;box-sizing:border-box;border:1px solid #cbc3ae;border-radius:14px;padding:14px;min-height:150px;resize:vertical}.checkbox{display:flex;gap:12px;align-items:flex-start}.actions{display:flex;gap:12px;align-items:center;margin-top:28px}button{background:#2f5d50;color:white;border:0;border-radius:999px;padding:12px 20px;font-weight:800;cursor:pointer}.link{color:#2f5d50;text-decoration:none;font-weight:700}.alert{background:#e6f4ea;color:#24533f;border:1px solid #b8dfc7;border-radius:14px;padding:14px;margin:20px 0}.error{color:#9b1c1c;font-size:14px;margin-top:8px}.summary{background:#fbfaf6;border:1px solid #ece7d9;border-radius:16px;padding:16px;margin-top:22px}.summary strong{display:block;margin-bottom:6px}.site-header{background:#fff;border-bottom:1px solid #ece7d9}.site-header__inner{max-width:860px;margin:0 auto;padding:16px 20px;display:flex;justify-content:space-between;gap:16px;align-items:center}.brand{color:#1d1d1b;font-weight:850;text-decoration:none}.nav{display:flex;gap:8px;flex-wrap:wrap}.nav a{border:1px solid #ded7c5;border-radius:999px;color:#2f5d50;padding:8px 12px;text-decoration:none;font-weight:750}.nav a.active{background:#2f5d50;color:#fff;border-color:#2f5d50}.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.status-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;background:#f1f6f3;color:#24533f;padding:8px 12px;font-weight:800}.status-dot{width:9px;height:9px;border-radius:50%;background:#3c9d68}.status-dot.offline{background:#c37b32}
     </style>
 </head>
 <body>
+    <header class="site-header">
+        <div class="site-header__inner">
+            <a class="brand" href="{{ route('bot.settings.edit') }}">WhatsApp Admin</a>
+            <nav class="nav" aria-label="Navegación WhatsApp">
+                <a class="active" href="{{ route('bot.settings.edit') }}">Settings</a>
+                <a href="{{ route('whatsapp.qr') }}">QR</a>
+                <a href="{{ route('whatsapp.status') }}">Status JSON</a>
+            </nav>
+        </div>
+    </header>
     <main class="wrap">
         <section class="card">
             <p class="eyebrow">WhatsApp</p>
             <h1>Configuración del bot</h1>
             <p class="intro">Definí cómo responderá el bot a los mensajes entrantes. Por defecto se priorizan conversaciones de clientes directos y se ignoran grupos de WhatsApp.</p>
+
+            <div class="summary">
+                <strong>Estado de WhatsApp</strong>
+                <div class="status-grid">
+                    <span class="status-pill"><span class="status-dot {{ $whatsAppStatus['label'] === 'Conectado' ? '' : 'offline' }}"></span>{{ $whatsAppStatus['label'] }}</span>
+                    <span class="hint">{{ $whatsAppStatus['detail'] }}</span>
+                </div>
+            </div>
 
             @if (session('status'))
                 <div class="alert">{{ session('status') }}</div>
