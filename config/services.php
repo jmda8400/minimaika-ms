@@ -35,6 +35,14 @@ return [
         ],
     ],
 
+    'whatsapp_web' => [
+        'base_url' => env('WHATSAPP_WEB_BASE_URL'),
+        'api_key' => env('WHATSAPP_WEB_API_KEY'),
+        'instance' => env('WHATSAPP_WEB_INSTANCE', 'refugio-agostino-rocca'),
+        'webhook_secret' => env('WHATSAPP_WEB_WEBHOOK_SECRET'),
+        'timeout' => env('WHATSAPP_WEB_TIMEOUT', 15),
+    ],
+
     'groq' => [
         'api_key' => env('GROQ_API_KEY'),
         'model' => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
