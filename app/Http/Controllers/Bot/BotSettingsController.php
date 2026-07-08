@@ -22,7 +22,7 @@ class BotSettingsController extends Controller
     {
         return view('bot.settings', [
             'settings' => $this->settingsService->get(),
-            'whatsAppStatus' => $this->whatsAppStatus(),
+            'whatsApp' => $this->whatsAppState(),
         ]);
     }
 
@@ -43,25 +43,64 @@ class BotSettingsController extends Controller
         return redirect()->route('bot.settings.edit')->with('status', 'Configuración guardada.');
     }
 
-    /**
-     * @return array{available:bool,label:string,detail:string|null}
-     */
-    private function whatsAppStatus(): array
+    public function forgetSession(): RedirectResponse
     {
+        try {
+            $this->whatsAppGatewayService->logout();
+
+            return redirect()->route('bot.settings.edit')->with('status', 'Sesión de WhatsApp olvidada. Escaneá un QR nuevo para volver a conectar.');
+        } catch (Throwable) {
+            return redirect()->route('bot.settings.edit')->with('status', 'No se pudo olvidar la sesión de WhatsApp. Revisá el gateway e intentá nuevamente.');
+        }
+    }
+
+    /**
+     * @return array{available:bool,label:string,detail:string|null,connected:bool,payload:array<string,mixed>,qr:array{image:string,code:string,error:string|null}}
+     */
+    private function whatsAppState(): array
+    {
+        $payload = [];
+        $state = '';
+        $available = false;
+
         try {
             $payload = $this->whatsAppGatewayService->status();
             $state = strtolower((string) (data_get($payload, 'instance.state') ?? data_get($payload, 'state') ?? data_get($payload, 'status') ?? ''));
+            $available = true;
+        } catch (Throwable) {
+            // Keep rendering settings even when the gateway is unavailable.
+        }
+
+        $connected = in_array($state, ['open', 'connected', 'online'], true);
+
+        return [
+            'available' => $available,
+            'label' => $available ? ($connected ? 'Conectado' : 'No conectado') : 'Estado no disponible',
+            'detail' => $available ? ($state !== '' ? $state : 'Sin estado informado') : 'No se pudo consultar el gateway de WhatsApp.',
+            'connected' => $connected,
+            'payload' => $payload,
+            'qr' => $connected ? ['image' => '', 'code' => '', 'error' => null] : $this->qrState(),
+        ];
+    }
+
+    /**
+     * @return array{image:string,code:string,error:string|null}
+     */
+    private function qrState(): array
+    {
+        try {
+            $payload = $this->whatsAppGatewayService->qr();
 
             return [
-                'available' => true,
-                'label' => in_array($state, ['open', 'connected', 'online'], true) ? 'Conectado' : 'No conectado',
-                'detail' => $state !== '' ? $state : 'Sin estado informado',
+                'image' => (string) (data_get($payload, 'base64') ?? data_get($payload, 'qrcode.base64') ?? ''),
+                'code' => (string) (data_get($payload, 'code') ?? data_get($payload, 'pairingCode') ?? ''),
+                'error' => null,
             ];
         } catch (Throwable) {
             return [
-                'available' => false,
-                'label' => 'Estado no disponible',
-                'detail' => 'No se pudo consultar el gateway de WhatsApp.',
+                'image' => '',
+                'code' => '',
+                'error' => 'No se pudo obtener el QR desde el gateway.',
             ];
         }
     }

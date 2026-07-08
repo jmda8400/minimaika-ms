@@ -19,6 +19,11 @@ class WhatsAppGatewayService
         return $this->request()->get($this->url('instance/connect'))->throw()->json() ?? [];
     }
 
+    public function logout(): array
+    {
+        return $this->request()->delete($this->url('instance/logout'))->throw()->json() ?? [];
+    }
+
     public function sendText(string $phone, string $text): void
     {
         $this->request()
