@@ -107,7 +107,7 @@ class BotSettingsTest extends TestCase
 
         $this->post(route('bot.settings.forget-session'))
             ->assertRedirect(route('bot.settings.edit'))
-            ->assertSessionHas('status', 'Sesión de WhatsApp olvidada. Escaneá un QR nuevo para volver a conectar.');
+            ->assertSessionHas('status', 'Sesión de WhatsApp olvidada. QR nuevo disponible para reconexión.');
     }
 
     public function test_webhook_uses_default_message_when_configured(): void
