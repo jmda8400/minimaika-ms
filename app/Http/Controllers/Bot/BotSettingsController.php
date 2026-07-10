@@ -48,9 +48,9 @@ class BotSettingsController extends Controller
         try {
             $this->whatsAppGatewayService->logout();
 
-            return redirect()->route('bot.settings.edit')->with('status', 'Sesión de WhatsApp olvidada. Escaneá un QR nuevo para volver a conectar.');
+            return redirect()->route('bot.settings.edit')->with('status', 'Sesión de WhatsApp olvidada. QR nuevo disponible para reconexión.');
         } catch (Throwable) {
-            return redirect()->route('bot.settings.edit')->with('status', 'No se pudo olvidar la sesión de WhatsApp. Revisá el gateway e intentá nuevamente.');
+            return redirect()->route('bot.settings.edit')->with('status', 'No se pudo olvidar la sesión de WhatsApp. Gateway no disponible para completar la acción.');
         }
     }
 
