@@ -25,6 +25,7 @@ class BotSettingsTest extends TestCase
             'response_mode' => 'default',
             'default_message' => 'Te respondemos pronto.',
             'respond_to_groups' => '1',
+            'use_generative_ai' => '1',
         ])->assertRedirect(route('bot.settings.edit'));
 
         Storage::disk('local')->assertExists('bot-settings.json');
@@ -33,6 +34,7 @@ class BotSettingsTest extends TestCase
         $this->assertSame('default', $settings['response_mode']);
         $this->assertSame('Te respondemos pronto.', $settings['default_message']);
         $this->assertTrue($settings['respond_to_groups']);
+        $this->assertTrue($settings['use_generative_ai']);
     }
 
 
@@ -50,7 +52,8 @@ class BotSettingsTest extends TestCase
             ->assertDontSee('WhatsApp Admin')
             ->assertSee('Conectado')
             ->assertSee('Respuesta de /whatsapp/status')
-            ->assertSee('Olvidar sesión y pedir QR nuevo');
+            ->assertSee('Olvidar sesión y pedir QR nuevo')
+            ->assertSee('Responder con IA generativa (Groq)');
     }
 
     public function test_qr_page_redirects_to_settings_when_whatsapp_is_connected(): void
@@ -117,6 +120,7 @@ class BotSettingsTest extends TestCase
             'response_mode' => 'default',
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
+            'use_generative_ai' => false,
         ]));
 
         $this->mock(RagBotService::class, function ($mock): void {
@@ -125,6 +129,32 @@ class BotSettingsTest extends TestCase
 
         $this->mock(WhatsAppGatewayService::class, function ($mock): void {
             $mock->shouldReceive('sendText')->once()->with('5492944000000', 'Mensaje fijo.');
+        });
+
+        $this->postJson(route('whatsapp.webhook'), [
+            'data' => [
+                'key' => ['fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net'],
+                'message' => ['conversation' => 'Hola'],
+            ],
+        ])->assertOk()->assertJson(['status' => 'sent']);
+    }
+
+    public function test_webhook_passes_generative_ai_setting_to_bot(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('bot-settings.json', json_encode([
+            'response_mode' => 'bot',
+            'default_message' => 'Mensaje fijo.',
+            'respond_to_groups' => false,
+            'use_generative_ai' => false,
+        ]));
+
+        $this->mock(RagBotService::class, function ($mock): void {
+            $mock->shouldReceive('answer')->once()->with('Hola', null, false)->andReturn(['answer' => 'Respuesta sin IA generativa.']);
+        });
+
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('sendText')->once()->with('5492944000000', 'Respuesta sin IA generativa.');
         });
 
         $this->postJson(route('whatsapp.webhook'), [

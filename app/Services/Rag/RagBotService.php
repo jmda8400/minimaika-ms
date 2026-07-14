@@ -30,7 +30,7 @@ class RagBotService
     ) {
     }
 
-    public function answer(string $question, ?int $limit = null): array
+    public function answer(string $question, ?int $limit = null, bool $useGenerativeAi = true): array
     {
         Log::info('Pregunta recibida en bot RAG.', ['question' => $question]);
 
@@ -50,7 +50,7 @@ class RagBotService
             return $this->finalizeResponse($question, $answer, [], 'intent', '', ['respuesta automática']);
         }
 
-        if ($intent !== null && $intent['intent'] === 'clarification' && $this->recentHistory() !== []) {
+        if ($useGenerativeAi && $intent !== null && $intent['intent'] === 'clarification' && $this->recentHistory() !== []) {
             Log::info('Se usó historial para aclaración.', ['history_items' => count($this->recentHistory())]);
             $prompt = $this->buildClarificationPrompt($question);
             Log::info('Llamando a Groq para aclaración con historial.');
@@ -79,6 +79,12 @@ class RagBotService
             return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, [], 'rag', $prompt, []);
         }
 
+        if (! $useGenerativeAi) {
+            Log::info('Se usó respuesta extractiva sin IA generativa.');
+
+            return $this->finalizeResponse($question, $this->buildExtractiveAnswer($fragments, $intent), $fragments, 'rag_extractive', $prompt, $this->sourcesFromFragments($fragments));
+        }
+
         Log::info('Llamando a Groq para redacción final.');
         $answer = $this->groqChatService->generate(self::SYSTEM_PROMPT, $prompt);
 
@@ -97,6 +103,20 @@ class RagBotService
         return $this->finalizeResponse($question, $answer, $fragments, 'rag', $prompt, $this->sourcesFromFragments($fragments));
     }
 
+    private function buildExtractiveAnswer(array $fragments, ?array $intent): string
+    {
+        $answer = $this->truncateWords($fragments[0]['content'] ?? self::FALLBACK_MESSAGE, 90);
+
+        if ($answer === '') {
+            $answer = self::FALLBACK_MESSAGE;
+        }
+
+        if ($intent !== null && $intent['prepend_response'] !== null) {
+            return $intent['prepend_response']."\n\n".$answer;
+        }
+
+        return $answer;
+    }
 
     private function shouldAnswerLocally(?array $intent): bool
     {

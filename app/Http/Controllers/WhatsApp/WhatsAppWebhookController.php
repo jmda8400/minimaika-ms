@@ -39,7 +39,7 @@ class WhatsAppWebhookController extends Controller
         try {
             $answer = $settings['response_mode'] === 'default'
                 ? $settings['default_message']
-                : $this->ragBotService->answer($message['text'])['answer'];
+                : $this->ragBotService->answer($message['text'], null, $settings['use_generative_ai'])['answer'];
 
             $this->whatsAppGatewayService->sendText($message['phone'], $answer);
 
