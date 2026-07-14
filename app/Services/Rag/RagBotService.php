@@ -14,7 +14,7 @@ class RagBotService
     private const MAX_CONTEXT_WORDS = 700;
     private const MAX_HISTORY_ITEMS = 5;
     private const MIN_HISTORY_ITEMS = 3;
-    private const FALLBACK_MESSAGE = 'No tengo esa información confirmada en la base de conocimiento del refugio. Te recomiendo consultar directamente con el refugio para evitar darte un dato incorrecto.';
+    private const FALLBACK_MESSAGE = 'No tengo esa información confirmada en la base de conocimiento del refugio. Ya di aviso al refugio para que puedan revisar tu consulta y evitar darte un dato incorrecto.';
     private const RESERVATION_GUIDANCE = 'Entiendo. Para ayudarte con eso necesito que tengas a mano el código de reserva o los datos con los que hiciste la reserva. Con eso se puede revisar el caso y ver si corresponde cancelación, reprogramación o reembolso según las condiciones vigentes.';
     private const RESCHEDULE_LINK = 'https://www.refugioagostinorocca.com/reschedule';
 
@@ -76,7 +76,7 @@ class RagBotService
         if ($fragments === []) {
             Log::warning('Se usó fallback por falta de fragmentos relevantes.', ['fallback_reason' => 'no_fragments']);
 
-            return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, [], 'rag', $prompt, []);
+            return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, [], 'fallback', $prompt, []);
         }
 
         if (! $useGenerativeAi) {
@@ -91,7 +91,7 @@ class RagBotService
         if ($answer === null) {
             Log::error('Groq falló. Se usa fallback.');
 
-            return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, $fragments, 'rag', $prompt, $this->sourcesFromFragments($fragments));
+            return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, $fragments, 'fallback', $prompt, $this->sourcesFromFragments($fragments));
         }
 
         Log::info('Groq respondió correctamente.');

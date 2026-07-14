@@ -165,6 +165,41 @@ class BotSettingsTest extends TestCase
         ])->assertOk()->assertJson(['status' => 'sent']);
     }
 
+    public function test_webhook_alerts_refuge_when_bot_has_no_confirmed_information(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('bot-settings.json', json_encode([
+            'response_mode' => 'bot',
+            'default_message' => 'Mensaje fijo.',
+            'respond_to_groups' => false,
+            'use_generative_ai' => false,
+        ]));
+
+        $this->mock(RagBotService::class, function ($mock): void {
+            $mock->shouldReceive('answer')->once()->with('Consulta inexistente', null, false)->andReturn([
+                'answer' => 'No tengo esa información confirmada.',
+                'source_type' => 'fallback',
+            ]);
+        });
+
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('sendText')->once()->withArgs(function (string $phone, string $text): bool {
+                return $phone === '2944360712'
+                    && str_contains($text, 'no encontré información confirmada')
+                    && str_contains($text, 'Usuario: 5492944000000')
+                    && str_contains($text, 'Consulta: Consulta inexistente');
+            });
+            $mock->shouldReceive('sendText')->once()->with('5492944000000', 'No tengo esa información confirmada.');
+        });
+
+        $this->postJson(route('whatsapp.webhook'), [
+            'data' => [
+                'key' => ['fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net'],
+                'message' => ['conversation' => 'Consulta inexistente'],
+            ],
+        ])->assertOk()->assertJson(['status' => 'sent']);
+    }
+
     public function test_webhook_ignores_groups_unless_enabled(): void
     {
         Storage::fake('local');
