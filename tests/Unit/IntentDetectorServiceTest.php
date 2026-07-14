@@ -19,6 +19,24 @@ class IntentDetectorServiceTest extends TestCase
         $this->assertNull($intent['prepend_response']);
     }
 
+
+    public function test_tac_question_has_specific_human_answer(): void
+    {
+        $intent = $this->detect('Tienen comida sin TAC?');
+
+        $this->assertSame('comida_sin_gluten', $intent['intent']);
+        $this->assertFalse($intent['use_rag']);
+        $this->assertStringContainsString('contaminación cruzada', $intent['response']);
+    }
+
+    public function test_tacc_question_has_specific_human_answer(): void
+    {
+        $intent = $this->detect('Tienen menú sin TACC?');
+
+        $this->assertSame('comida_sin_gluten', $intent['intent']);
+        $this->assertFalse($intent['use_rag']);
+    }
+
     public function test_vegan_question_uses_rag_without_tariff_prefix(): void
     {
         $intent = $this->detect('Buenas, tienen comida vegana?');
