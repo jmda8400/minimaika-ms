@@ -124,7 +124,7 @@ class RagBotService
             return false;
         }
 
-        return in_array($intent['intent'], ['saludo', 'despedida', 'agradecimiento', 'fallback_conversacional'], true);
+        return in_array($intent['intent'], ['saludo', 'despedida', 'agradecimiento', 'fallback_conversacional', 'comida_sin_gluten'], true);
     }
 
     private function finalizeResponse(string $question, string $answer, array $fragments, string $sourceType, string $prompt, array $sources): array

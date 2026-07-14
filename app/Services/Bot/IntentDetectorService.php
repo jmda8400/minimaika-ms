@@ -35,7 +35,27 @@ class IntentDetectorService
             ];
         }
 
-        if ($this->matchesAny($normalized, ['hola', 'buenas', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'como estas'])) {
+        if ($this->matchesAny($normalized, ['sin gluten', 'gluten', 'celiaco', 'celiaca', 'celiacos', 'celiacas'])) {
+            return [
+                'intent' => 'comida_sin_gluten',
+                'response' => 'Tenemos opciones sin gluten en la carta, pero no podemos garantizar contaminación cruzada. Si eso es un problema, recomendamos que traigas tu propia comida. En ese caso, consultanos en el refugio para ver cómo cocinar o calentar algo.',
+                'use_rag' => false,
+                'show_auto_source' => true,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->matchesAny($normalized, ['vegetariano', 'vegetariana', 'vegetarianos', 'vegetarianas', 'vegano', 'vegana', 'veganos', 'veganas'])) {
+            return [
+                'intent' => 'restricciones_alimentarias',
+                'response' => null,
+                'use_rag' => true,
+                'show_auto_source' => false,
+                'prepend_response' => null,
+            ];
+        }
+
+        if ($this->isGreetingOnly($normalized)) {
             return [
                 'intent' => 'saludo',
                 'response' => '¡Hola! Te comunicaste con el asistente virtual del Refugio Agostino Rocca. Puedo ayudarte con reservas, ubicación, acceso, horarios, servicios, caminatas, pagos y preguntas frecuentes. ¿En qué puedo ayudarte?',
@@ -95,7 +115,7 @@ class IntentDetectorService
             ];
         }
 
-        if ($this->matchesAny($normalized, ['precio', 'precios', 'tarifa', 'tarifas', 'cuanto cuesta', 'valor', 'pernocte', 'comida', 'ducha'])) {
+        if ($this->isPriceQuestion($normalized)) {
             return [
                 'intent' => 'precio_tarifas',
                 'response' => null,
@@ -172,5 +192,23 @@ class IntentDetectorService
     private function looksConversational(string $text): bool
     {
         return $this->matchesAny($text, ['hola', 'buen', 'gracias', 'chau', 'adios', 'como estas', 'que tal', 'necesito', 'quiero', 'ayuda', 'consulta']);
+    }
+
+    private function isGreetingOnly(string $text): bool
+    {
+        return in_array($text, ['hola', 'hola buenas', 'hola buen dia', 'hola buenas tardes', 'hola buenas noches', 'buenas', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'como estas'], true);
+    }
+
+    private function isPriceQuestion(string $text): bool
+    {
+        if ($this->matchesAny($text, ['precio', 'precios', 'tarifa', 'tarifas', 'cuanto cuesta', 'cuanto sale', 'valor', 'valores'])) {
+            return true;
+        }
+
+        if ($this->matchesAny($text, ['pernocte', 'ducha'])) {
+            return true;
+        }
+
+        return $this->matchesAny($text, ['costo comida', 'costo comidas', 'comida cuesta', 'comidas cuestan', 'valor comida', 'valor comidas']);
     }
 }
