@@ -3,6 +3,7 @@
 namespace App\Services\Rag;
 
 use App\Services\Bot\IntentDetectorService;
+use App\Services\Bot\PrewrittenResponseService;
 use App\Services\GroqChatService;
 use Illuminate\Support\Facades\Log;
 
@@ -27,6 +28,7 @@ class RagBotService
         private readonly KnowledgeBaseService $knowledgeBaseService,
         private readonly IntentDetectorService $intentDetectorService,
         private readonly GroqChatService $groqChatService,
+        private readonly PrewrittenResponseService $prewrittenResponseService,
     ) {
     }
 
@@ -38,32 +40,44 @@ class RagBotService
         Log::info('Intent detectado.', ['intent' => $intent['intent'] ?? 'none']);
 
         if ($intent !== null && in_array($intent['intent'], ['cancel_reservation', 'refund_request'], true)) {
-            Log::info('Se usó respuesta local por intent.', ['intent' => $intent['intent']]);
+            Log::info('Se usó respuesta preescrita por intent de reclamo/reserva.', ['intent' => $intent['intent']]);
 
-            return $this->finalizeResponse($question, self::RESERVATION_GUIDANCE, [], 'intent', '', ['respuesta automática']);
+            return $this->finalizePrewrittenResponse($question, 'reclamo_reserva_terminos', 'prewritten_intent', '', ['respuesta preescrita']);
         }
 
         if ($intent !== null && $intent['intent'] === 'reschedule_reservation') {
-            Log::info('Se usó respuesta local por intent.', ['intent' => $intent['intent']]);
-            $answer = "Podés reprogramar tu reserva desde este enlace:\n".self::RESCHEDULE_LINK."\n\nAhí vas a poder gestionar el cambio de fecha de tu reserva. Te recomiendo tener a mano el código de reserva o los datos con los que hiciste la reserva.";
+            Log::info('Se usó respuesta preescrita por intent de reprogramación.', ['intent' => $intent['intent']]);
 
-            return $this->finalizeResponse($question, $answer, [], 'intent', '', ['respuesta automática']);
+            return $this->finalizePrewrittenResponse($question, 'reprogramar_reserva', 'prewritten_intent', '', ['respuesta preescrita']);
         }
 
-        if ($useGenerativeAi && $intent !== null && $intent['intent'] === 'clarification' && $this->recentHistory() !== []) {
-            Log::info('Se usó historial para aclaración.', ['history_items' => count($this->recentHistory())]);
-            $prompt = $this->buildClarificationPrompt($question);
-            Log::info('Llamando a Groq para aclaración con historial.');
-            $answer = $this->groqChatService->generate(self::SYSTEM_PROMPT, $prompt);
+        if ($intent !== null && $intent['intent'] === 'clarification' && $this->recentHistory() !== []) {
+            Log::info('Se usó historial para aclaración sin redacción generativa.', ['history_items' => count($this->recentHistory())]);
+            $history = $this->recentHistory();
+            $lastAnswer = (string) ($history[array_key_last($history)]['answer'] ?? self::FALLBACK_MESSAGE);
 
-            if ($answer !== null) {
-                return $this->finalizeResponse($question, $answer, [], 'history', $prompt, ['historial']);
-            }
+            return $this->finalizeResponse($question, $lastAnswer, [], 'history', '', ['historial']);
         }
 
         if ($this->shouldAnswerLocally($intent)) {
             Log::info('Se usó respuesta local por intent.', ['intent' => $intent['intent']]);
             return $this->finalizeResponse($question, $intent['response'], [], 'intent', '', ['respuesta automática']);
+        }
+
+        $prewrittenKey = $this->prewrittenResponseService->detect($question);
+        if ($prewrittenKey !== null) {
+            Log::info('Se usó respuesta preescrita por palabras clave.', ['response_key' => $prewrittenKey]);
+
+            return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_keyword', '', ['respuesta preescrita']);
+        }
+
+        if ($useGenerativeAi) {
+            $prewrittenKey = $this->classifyPrewrittenResponse($question);
+            if ($prewrittenKey !== null) {
+                Log::info('Groq encauzó a respuesta preescrita.', ['response_key' => $prewrittenKey]);
+
+                return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_groq', '', ['respuesta preescrita']);
+            }
         }
 
         $topK = min(self::MAX_FRAGMENTS, $this->resolveTopK($limit));
@@ -80,27 +94,79 @@ class RagBotService
         }
 
         if (! $useGenerativeAi) {
-            Log::info('Se usó respuesta extractiva sin IA generativa.');
+            $prewrittenKey = $this->detectPrewrittenFromFragments($question, $fragments);
+            if ($prewrittenKey !== null) {
+                Log::info('Se usó respuesta preescrita sin IA generativa.', ['response_key' => $prewrittenKey]);
 
-            return $this->finalizeResponse($question, $this->buildExtractiveAnswer($fragments, $intent), $fragments, 'rag_extractive', $prompt, $this->sourcesFromFragments($fragments));
-        }
+                return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_rag_extractive', $prompt, $this->sourcesFromFragments($fragments), $fragments);
+            }
 
-        Log::info('Llamando a Groq para redacción final.');
-        $answer = $this->groqChatService->generate(self::SYSTEM_PROMPT, $prompt);
-
-        if ($answer === null) {
-            Log::error('Groq falló. Se usa fallback.');
+            Log::warning('Se usó fallback sin IA generativa porque no se pudo encauzar a una respuesta preescrita.', ['fallback_reason' => 'no_prewritten_match']);
 
             return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, $fragments, 'fallback', $prompt, $this->sourcesFromFragments($fragments));
         }
 
-        Log::info('Groq respondió correctamente.');
+        $prewrittenKey = $this->detectPrewrittenFromFragments($question, $fragments);
+        if ($prewrittenKey !== null) {
+            Log::info('Se usó respuesta preescrita a partir del contexto RAG.', ['response_key' => $prewrittenKey]);
 
-        if ($intent !== null && $intent['prepend_response'] !== null) {
-            $answer = $intent['prepend_response']."\n\n".$answer;
+            return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_rag', $prompt, $this->sourcesFromFragments($fragments), $fragments);
         }
 
-        return $this->finalizeResponse($question, $answer, $fragments, 'rag', $prompt, $this->sourcesFromFragments($fragments));
+        Log::warning('Se usó fallback porque no se pudo encauzar a una respuesta preescrita.', ['fallback_reason' => 'no_prewritten_match']);
+
+        return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, $fragments, 'fallback', $prompt, $this->sourcesFromFragments($fragments));
+    }
+
+    private function finalizePrewrittenResponse(string $question, string $key, string $sourceType, string $prompt, array $sources, array $fragments = []): array
+    {
+        $answer = $this->prewrittenResponseService->get($key) ?? self::FALLBACK_MESSAGE;
+
+        return $this->finalizeResponse($question, $answer, $fragments, $sourceType, $prompt, $sources);
+    }
+
+    private function classifyPrewrittenResponse(string $question): ?string
+    {
+        $prompt = "Mensaje del cliente:\n{$question}\n\n"
+            ."Elegí una sola clave de esta lista de respuestas preescritas:\n"
+            .$this->prewrittenResponseService->keysForPrompt()."\n\n"
+            ."Respondé únicamente JSON válido con este formato: {\"response_key\":\"clave\"}. "
+            ."Si ninguna respuesta corresponde claramente, usá {\"response_key\":null}. No redactes una respuesta al cliente.";
+
+        $raw = $this->groqChatService->generate(
+            'Clasificás mensajes de WhatsApp del Refugio Agostino Rocca. No redactes respuestas: solo elegí una clave preescrita o null.',
+            $prompt
+        );
+
+        if ($raw === null) {
+            return null;
+        }
+
+        $decoded = json_decode($raw, true);
+        $key = is_array($decoded) ? ($decoded['response_key'] ?? null) : null;
+
+        if (! is_string($key) || $key === '' || $key === 'null') {
+            return null;
+        }
+
+        return $this->prewrittenResponseService->isValidKey($key) ? $key : null;
+    }
+
+    private function detectPrewrittenFromFragments(string $question, array $fragments): ?string
+    {
+        $key = $this->prewrittenResponseService->detect($question);
+        if ($key !== null) {
+            return $key;
+        }
+
+        foreach ($fragments as $fragment) {
+            $key = $this->prewrittenResponseService->detect($fragment['content'] ?? '');
+            if ($key !== null) {
+                return $key;
+            }
+        }
+
+        return null;
     }
 
     private function buildExtractiveAnswer(array $fragments, ?array $intent): string

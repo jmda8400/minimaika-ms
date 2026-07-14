@@ -35,10 +35,10 @@ class IntentDetectorService
             ];
         }
 
-        if ($this->matchesAny($normalized, ['sin gluten', 'gluten', 'celiaco', 'celiaca', 'celiacos', 'celiacas'])) {
+        if ($this->matchesAny($normalized, ['sin gluten', 'gluten', 'sin tacc', 'tacc', 'sin tac', 'tac', 'celiaco', 'celiaca', 'celiacos', 'celiacas', 'apto celiaco', 'apta celiaca'])) {
             return [
                 'intent' => 'comida_sin_gluten',
-                'response' => 'Tenemos opciones sin gluten en la carta, pero no podemos garantizar contaminación cruzada. Si eso es un problema, recomendamos que traigas tu propia comida. En ese caso, consultanos en el refugio para ver cómo cocinar o calentar algo.',
+                'response' => 'Tenemos opciones sin gluten en nuestra carta, pero no podemos garantizar la contaminación cruzada. En caso de que esto sea un problema, solemos pedirles si pueden llevarse su propia comida. Si necesitás cocinar o calentar algo, también se podría en este caso.',
                 'use_rag' => false,
                 'show_auto_source' => true,
                 'prepend_response' => null,

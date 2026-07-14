@@ -6,6 +6,7 @@ class KnowledgeBaseService
 {
     private const DEFAULT_CHUNK_SIZE = 180;
     private const DEFAULT_CHUNK_OVERLAP = 40;
+    private const MIN_SCORE = 0.2;
 
     /**
      * @var array<string, bool>
@@ -47,7 +48,7 @@ class KnowledgeBaseService
 
             $score = ($coverage * 0.65) + ($frequency * 0.35);
 
-            if ($score <= 0.0) {
+            if ($score < self::MIN_SCORE) {
                 continue;
             }
 
