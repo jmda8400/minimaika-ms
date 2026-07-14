@@ -11,7 +11,7 @@ class BotSettingsService
     private const PATH = 'bot-settings.json';
 
     /**
-     * @return array{response_mode:string,default_message:string,respond_to_groups:bool}
+     * @return array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool}
      */
     public function get(): array
     {
@@ -29,11 +29,12 @@ class BotSettingsService
             'response_mode' => $settings['response_mode'] === 'default' ? 'default' : 'bot',
             'default_message' => trim((string) $settings['default_message']),
             'respond_to_groups' => (bool) $settings['respond_to_groups'],
+            'use_generative_ai' => (bool) $settings['use_generative_ai'],
         ];
     }
 
     /**
-     * @param array{response_mode:string,default_message:string,respond_to_groups:bool} $settings
+     * @param array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool} $settings
      */
     public function save(array $settings): void
     {
@@ -43,11 +44,12 @@ class BotSettingsService
             'response_mode' => $settings['response_mode'] === 'default' ? 'default' : 'bot',
             'default_message' => trim($settings['default_message']),
             'respond_to_groups' => $settings['respond_to_groups'],
+            'use_generative_ai' => $settings['use_generative_ai'],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 
     /**
-     * @return array{response_mode:string,default_message:string,respond_to_groups:bool}
+     * @return array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool}
      */
     private function defaults(): array
     {
@@ -55,6 +57,7 @@ class BotSettingsService
             'response_mode' => 'bot',
             'default_message' => 'Gracias por escribirnos. Recibimos tu mensaje y te responderemos a la brevedad.',
             'respond_to_groups' => false,
+            'use_generative_ai' => true,
         ];
     }
 }
