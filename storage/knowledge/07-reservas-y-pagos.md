@@ -18,14 +18,13 @@ La reserva puede pagarse en el motor de reservas con Mercado Pago.
 
 Mercado Pago permite utilizar distintos medios de pago, incluyendo tarjeta de crédito y débito.
 
-En el refugio, los pagos son solo en efectivo.
+En el refugio se acepta efectivo con descuento, tarjetas de crédito y débito, Mercado Pago y transferencia.
 
 ## Tarifas
 El precio del pernocte y de las comidas debe consultarse en la sección de tarifas de la web oficial.
 
 La ducha no está incluida en el precio del pernocte y tiene costo aparte.
 
-Por contrato con el Club Andino, la ducha se cobra al 50% del valor del pernocte.
 
 ## Servicios y restricciones
 La bolsa de dormir puede alquilarse en el refugio. Se pide al llegar y hay disponibilidad para todos.

@@ -7,7 +7,7 @@ Sí. Es obligatorio subir con reserva previa. La reserva se realiza desde el bot
 Sí. La reserva puede pagarse desde el motor de reservas con Mercado Pago, usando los medios de pago disponibles en esa plataforma.
 
 ## ¿Se puede pagar en el refugio?
-En el refugio el pago es solo en efectivo.
+En el refugio se acepta efectivo con descuento, tarjetas de crédito y débito, Mercado Pago y transferencia.
 
 ## ¿Se puede acampar en la zona del refugio?
 No. No está permitido acampar en la zona del refugio ni en el Paso de las Nubes. Parques Nacionales prohibió el acampe en esa zona desde enero de 2023.
@@ -19,13 +19,13 @@ Sí. La bolsa de dormir se alquila en el refugio. Se pide al llegar y hay dispon
 El valor del pernocte y de las comidas debe consultarse en la sección de tarifas de la web oficial. No inventar precios.
 
 ## ¿Hay opciones vegetarianas, veganas o aptas para celíacos?
-Sí. El refugio cuenta con opciones vegetarianas, veganas y aptas para celíacos.
+Sí. El refugio cuenta con opciones vegetarianas, veganas y opciones sin gluten. En opciones sin gluten no se puede garantizar contaminación cruzada.
 
 ## ¿Todo el grupo duerme en la misma habitación?
 Las habitaciones son compartidas y tienen 8 camas cada una. La organización de habitaciones se decide en el refugio al llegar. Siempre que sea posible, se prioriza mantener juntos a los grupos.
 
 ## ¿La ducha está incluida en el precio del pernocte?
-No. La ducha tiene costo aparte. Por contrato con el Club Andino, se cobra al 50% del valor del pernocte.
+No. La ducha tiene costo aparte.
 
 ## ¿Hay señal de celular o WiFi?
 No. En el refugio no hay señal de teléfono ni WiFi.
