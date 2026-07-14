@@ -5,8 +5,8 @@ No es necesario reservar las comidas. Están disponibles en el refugio y se pued
 Para la cena de Año Nuevo los platos son a la carta con la misma tarifa publicada en la web. El refugio suele obsequiar una mesa de dulces y un brindis; por lo general también se comparte lo que cada visitante haya llevado.
 
 ## Comida sin gluten
-Hay opciones sin gluten en la carta, pero no se puede garantizar que no exista contaminación cruzada.
-Si la contaminación cruzada es un problema, se recomienda llevar comida propia. En ese caso, si necesitás cocinar o calentar algo, se puede consultar en el refugio.
+Tenemos opciones sin gluten en la carta, pero no podemos garantizar contaminación cruzada.
+Si la contaminación cruzada es un problema, recomendamos traer comida propia. En ese caso, consultanos en el refugio para ver cómo cocinar o calentar algo.
 
 ## Cocina de visitantes
 Desde la pandemia, Parques Nacionales prohibió la cocina para visitantes en los refugios de montaña.
