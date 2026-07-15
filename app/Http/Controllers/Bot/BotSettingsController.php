@@ -32,14 +32,13 @@ class BotSettingsController extends Controller
             'response_mode' => ['required', 'in:bot,default'],
             'default_message' => ['required', 'string', 'max:1000'],
             'respond_to_groups' => ['nullable', 'boolean'],
-            'use_generative_ai' => ['nullable', 'boolean'],
         ]);
 
         $this->settingsService->save([
             'response_mode' => $validated['response_mode'],
             'default_message' => $validated['default_message'],
             'respond_to_groups' => $request->boolean('respond_to_groups'),
-            'use_generative_ai' => $request->boolean('use_generative_ai'),
+            'use_generative_ai' => true,
         ]);
 
         return redirect()->route('bot.settings.edit')->with('status', 'Configuración guardada.');

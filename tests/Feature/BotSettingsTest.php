@@ -25,7 +25,6 @@ class BotSettingsTest extends TestCase
             'response_mode' => 'default',
             'default_message' => 'Te respondemos pronto.',
             'respond_to_groups' => '1',
-            'use_generative_ai' => '1',
         ])->assertRedirect(route('bot.settings.edit'));
 
         Storage::disk('local')->assertExists('bot-settings.json');
@@ -53,7 +52,9 @@ class BotSettingsTest extends TestCase
             ->assertSee('Conectado')
             ->assertSee('Respuesta de /whatsapp/status')
             ->assertSee('Olvidar sesión y pedir QR nuevo')
-            ->assertSee('Responder con IA generativa (Groq)');
+            ->assertDontSee('Responder con IA generativa (Groq)')
+            ->assertDontSee('Groq redacta la respuesta usando la base de conocimiento')
+            ->assertSee('Respuestas: predefinidas, con encauzamiento automático cuando haga falta');
     }
 
     public function test_qr_page_redirects_to_settings_when_whatsapp_is_connected(): void

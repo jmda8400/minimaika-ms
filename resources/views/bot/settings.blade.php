@@ -62,7 +62,7 @@
                     <div class="options">
                         <label class="option">
                             <input type="radio" name="response_mode" value="bot" @checked(old('response_mode', $settings['response_mode']) === 'bot')>
-                            <span><strong>Responder con el bot</strong><br><span class="hint">Usa la base de conocimiento. Podés activar o desactivar la IA generativa abajo.</span></span>
+                            <span><strong>Responder con el bot</strong><br><span class="hint">Usa la base de conocimiento y solo envía respuestas predefinidas cuando corresponden.</span></span>
                         </label>
                         <label class="option">
                             <input type="radio" name="response_mode" value="default" @checked(old('response_mode', $settings['response_mode']) === 'default')>
@@ -72,13 +72,6 @@
                     @error('response_mode')<div class="error">{{ $message }}</div>@enderror
                 </div>
 
-                <div class="field">
-                    <label class="checkbox">
-                        <input type="checkbox" name="use_generative_ai" value="1" @checked(old('use_generative_ai', $settings['use_generative_ai']))>
-                        <span><strong>Responder con IA generativa (Groq)</strong><br><span class="hint">Activado: Groq redacta la respuesta usando la base de conocimiento. Desactivado: se envía una respuesta extractiva sin llamar al modelo generativo.</span></span>
-                    </label>
-                    @error('use_generative_ai')<div class="error">{{ $message }}</div>@enderror
-                </div>
 
                 <div class="field">
                     <label for="default_message">Mensaje por defecto</label>
@@ -97,7 +90,7 @@
 
                 <div class="summary">
                     <strong>Estado actual</strong>
-                    Modo: {{ $settings['response_mode'] === 'default' ? 'mensaje por defecto' : 'bot' }} · IA generativa: {{ $settings['use_generative_ai'] ? 'activada' : 'desactivada' }} · Grupos: {{ $settings['respond_to_groups'] ? 'habilitados' : 'ignorados' }}
+                    Modo: {{ $settings['response_mode'] === 'default' ? 'mensaje por defecto' : 'bot' }} · Respuestas: predefinidas, con encauzamiento automático cuando haga falta · Grupos: {{ $settings['respond_to_groups'] ? 'habilitados' : 'ignorados' }}
                 </div>
 
                 <div class="actions">
