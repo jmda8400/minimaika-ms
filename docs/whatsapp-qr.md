@@ -10,13 +10,13 @@ APP_URL=http://localhost:8001
 
 Con esa URL, los endpoints quedan:
 
-- `http://localhost:8001/whatsapp/qr`
+- `http://localhost:8001/whatsapp/settings`
 - `http://localhost:8001/whatsapp/status`
 - `http://localhost:8001/whatsapp/webhook`
 
 En producción, al cambiar `APP_URL=https://bot.refugioagostinorocca.com`, las mismas rutas pasan a:
 
-- `https://bot.refugioagostinorocca.com/whatsapp/qr`
+- `https://bot.refugioagostinorocca.com/whatsapp/settings`
 - `https://bot.refugioagostinorocca.com/whatsapp/status`
 - `https://bot.refugioagostinorocca.com/whatsapp/webhook`
 
@@ -39,7 +39,7 @@ WHATSAPP_WEB_TIMEOUT=15
 2. Levantar o configurar el gateway compatible con WhatsApp Web por QR y apuntar `WHATSAPP_WEB_BASE_URL` a su URL HTTP.
 3. Configurar en el gateway el webhook local:
    `http://localhost:8001/whatsapp/webhook`.
-4. Abrir `http://localhost:8001/whatsapp/qr` en el navegador.
+4. Abrir `http://localhost:8001/whatsapp/settings` en el navegador para ver la configuración y el QR.
 5. Escanear el QR desde WhatsApp en el celular, entrando a **Dispositivos vinculados**.
 6. Revisar `http://localhost:8001/whatsapp/status` para confirmar el estado de conexión.
 

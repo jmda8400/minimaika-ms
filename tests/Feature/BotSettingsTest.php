@@ -52,33 +52,16 @@ class BotSettingsTest extends TestCase
             ->assertSee('Conectado')
             ->assertSee('Respuesta de /whatsapp/status')
             ->assertSee('Olvidar sesión y pedir QR nuevo')
+            ->assertSee('Volver a Administracion')
             ->assertDontSee('Responder con IA generativa (Groq)')
             ->assertDontSee('Groq redacta la respuesta usando la base de conocimiento')
             ->assertSee('Respuestas: predefinidas, con encauzamiento automático cuando haga falta');
     }
 
-    public function test_qr_page_redirects_to_settings_when_whatsapp_is_connected(): void
+    public function test_qr_page_redirects_to_settings_because_settings_shows_qr(): void
     {
-        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
-            $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'open']]);
-            $mock->shouldNotReceive('qr');
-        });
-
         $this->get('/whatsapp/qr')
-            ->assertRedirect(route('bot.settings.edit'));
-    }
-
-    public function test_qr_page_has_no_navigation_header_when_whatsapp_is_not_connected(): void
-    {
-        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
-            $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'close']]);
-            $mock->shouldReceive('qr')->once()->andReturn(['base64' => 'data:image/png;base64,abc']);
-        });
-
-        $this->get('/whatsapp/qr')
-            ->assertOk()
-            ->assertDontSee('WhatsApp Admin')
-            ->assertDontSee('/whatsapp/status');
+            ->assertRedirect('/whatsapp/settings');
     }
 
 
