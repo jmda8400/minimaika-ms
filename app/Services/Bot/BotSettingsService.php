@@ -11,7 +11,7 @@ class BotSettingsService
     private const PATH = 'bot-settings.json';
 
     /**
-     * @return array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool}
+     * @return array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool,notify_on_fallback:bool,fallback_alert_phone:string}
      */
     public function get(): array
     {
@@ -30,11 +30,13 @@ class BotSettingsService
             'default_message' => trim((string) $settings['default_message']),
             'respond_to_groups' => (bool) $settings['respond_to_groups'],
             'use_generative_ai' => (bool) $settings['use_generative_ai'],
+            'notify_on_fallback' => (bool) $settings['notify_on_fallback'],
+            'fallback_alert_phone' => trim((string) $settings['fallback_alert_phone']),
         ];
     }
 
     /**
-     * @param array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool} $settings
+     * @param array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool,notify_on_fallback:bool,fallback_alert_phone:string} $settings
      */
     public function save(array $settings): void
     {
@@ -45,11 +47,13 @@ class BotSettingsService
             'default_message' => trim($settings['default_message']),
             'respond_to_groups' => $settings['respond_to_groups'],
             'use_generative_ai' => $settings['use_generative_ai'],
+            'notify_on_fallback' => $settings['notify_on_fallback'],
+            'fallback_alert_phone' => trim($settings['fallback_alert_phone']),
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
     }
 
     /**
-     * @return array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool}
+     * @return array{response_mode:string,default_message:string,respond_to_groups:bool,use_generative_ai:bool,notify_on_fallback:bool,fallback_alert_phone:string}
      */
     private function defaults(): array
     {
@@ -58,6 +62,8 @@ class BotSettingsService
             'default_message' => 'Gracias por escribirnos. Recibimos tu mensaje y te responderemos a la brevedad.',
             'respond_to_groups' => false,
             'use_generative_ai' => true,
+            'notify_on_fallback' => true,
+            'fallback_alert_phone' => '+54 2944360712',
         ];
     }
 }
