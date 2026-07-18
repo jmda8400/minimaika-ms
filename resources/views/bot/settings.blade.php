@@ -42,6 +42,10 @@
                     </form>
                     <a class="button-link" href="https://www.refugioagostinorocca.com/admin">Volver a Administracion</a>
                     <a class="link" href="{{ route('bot.settings.edit') }}">Actualizar estado</a>
+                    <form class="inline-form" method="post" action="{{ route('bot.settings.logout') }}">
+                        @csrf
+                        <button type="submit">Cerrar sesión</button>
+                    </form>
                 </div>
 
                 <div class="field">

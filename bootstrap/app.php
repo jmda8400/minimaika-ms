@@ -15,6 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         App\Console\Commands\MinimaikaKnowledgeTestCommand::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->alias([
+            'bot.settings.auth' => App\Http\Middleware\EnsureBotSettingsAuthenticated::class,
+        ]);
+
         $middleware->validateCsrfTokens(except: [
             'whatsapp/webhook',
         ]);
