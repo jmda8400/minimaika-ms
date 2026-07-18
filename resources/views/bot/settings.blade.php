@@ -40,7 +40,7 @@
                         @csrf
                         <button class="button-danger" type="submit">Olvidar sesión y pedir QR nuevo</button>
                     </form>
-                    <a class="button-link" href="https://www.refugioagostinorocca.com/admin">Administracion</a>
+                    <a class="button-link" href="https://www.refugioagostinorocca.com/admin">Volver a Administracion</a>
                     <a class="link" href="{{ route('bot.settings.edit') }}">Actualizar estado</a>
                 </div>
 

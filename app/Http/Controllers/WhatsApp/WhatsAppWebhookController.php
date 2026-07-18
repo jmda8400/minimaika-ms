@@ -9,7 +9,6 @@ use App\Services\WhatsApp\WhatsAppGatewayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -81,24 +80,6 @@ class WhatsAppWebhookController extends Controller
         return response()->json($this->whatsAppGatewayService->status());
     }
 
-    public function qr(Request $request): JsonResponse|RedirectResponse|Response
-    {
-        if (! $request->wantsJson() && $this->isConnected()) {
-            return redirect()->route('bot.settings.edit')->with('status', 'WhatsApp conectado correctamente.');
-        }
-
-        $payload = $this->whatsAppGatewayService->qr();
-
-        if ($request->wantsJson()) {
-            return response()->json($payload);
-        }
-
-        $qrImage = (string) (data_get($payload, 'base64') ?? data_get($payload, 'qrcode.base64') ?? '');
-        $pairingCode = (string) (data_get($payload, 'code') ?? data_get($payload, 'pairingCode') ?? '');
-
-        return response($this->renderQrPage($qrImage, $pairingCode, route('whatsapp.webhook')));
-    }
-
     /**
      * @param array<string,mixed> $payload
      * @return array{phone:string,text:string,is_group:bool}|null
@@ -126,55 +107,6 @@ class WhatsAppWebhookController extends Controller
             'text' => $text,
             'is_group' => $isGroup,
         ];
-    }
-
-    private function isConnected(): bool
-    {
-        try {
-            $payload = $this->whatsAppGatewayService->status();
-            $state = strtolower((string) (data_get($payload, 'instance.state') ?? data_get($payload, 'state') ?? data_get($payload, 'status') ?? ''));
-
-            return in_array($state, ['open', 'connected', 'online'], true);
-        } catch (Throwable) {
-            return false;
-        }
-    }
-
-    private function renderQrPage(string $qrImage, string $pairingCode, string $webhookUrl): string
-    {
-        $qrMarkup = $qrImage !== ''
-            ? '<img class="qr" src="'.e($qrImage).'" alt="Código QR de WhatsApp">'
-            : '<p class="muted">El gateway todavía no devolvió una imagen QR. Esta página se actualiza automáticamente.</p>';
-        $codeMarkup = $pairingCode !== ''
-            ? '<p class="muted">Código:</p><p class="code">'.e($pairingCode).'</p>'
-            : '';
-
-        $safeWebhookUrl = e($webhookUrl);
-        $settingsUrl = e(route('bot.settings.edit'));
-        return <<<HTML
-<!doctype html>
-<html lang="es">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta http-equiv="refresh" content="20">
-    <title>WhatsApp QR - Refugio Agostino Rocca</title>
-    <style>body{font-family:system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;min-height:100vh;margin:0;background:#f7f7f3;color:#1d1d1b}.page{display:grid;place-items:center;padding:40px 20px}.card{background:white;border-radius:18px;box-shadow:0 12px 40px #0002;max-width:520px;padding:32px;text-align:center}.qr{max-width:320px;width:100%;height:auto}.muted{color:#666;line-height:1.5}.code{font:700 28px ui-monospace,Menlo,monospace;letter-spacing:3px}.link{color:#2f5d50;font-weight:700;text-decoration:none}</style>
-</head>
-<body>
-    <main class="page">
-    <section class="card">
-        <h1>Conectar WhatsApp</h1>
-        <p class="muted">Abrí WhatsApp en el celular, entrá a Dispositivos vinculados y escaneá este código.</p>
-        {$qrMarkup}
-        {$codeMarkup}
-        <p class="muted">URL del webhook: <strong>{$safeWebhookUrl}</strong></p>
-        <p><a class="link" href="{$settingsUrl}">Volver a configuración</a></p>
-    </section>
-    </main>
-</body>
-</html>
-HTML;
     }
 
     private function isValidWebhookSecret(Request $request): bool
