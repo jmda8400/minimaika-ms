@@ -32,6 +32,8 @@ class BotSettingsController extends Controller
             'response_mode' => ['required', 'in:bot,default'],
             'default_message' => ['required', 'string', 'max:1000'],
             'respond_to_groups' => ['nullable', 'boolean'],
+            'notify_on_fallback' => ['nullable', 'boolean'],
+            'fallback_alert_phone' => ['required_if:notify_on_fallback,1', 'nullable', 'string', 'regex:/^\\+?[0-9][0-9\\s()-]{6,24}$/'],
         ]);
 
         $this->settingsService->save([
@@ -39,6 +41,8 @@ class BotSettingsController extends Controller
             'default_message' => $validated['default_message'],
             'respond_to_groups' => $request->boolean('respond_to_groups'),
             'use_generative_ai' => true,
+            'notify_on_fallback' => $request->boolean('notify_on_fallback'),
+            'fallback_alert_phone' => $validated['fallback_alert_phone'] ?? '',
         ]);
 
         return redirect()->route('bot.settings.edit')->with('status', 'Configuración guardada.');

@@ -25,6 +25,8 @@ class BotSettingsTest extends TestCase
             'response_mode' => 'default',
             'default_message' => 'Te respondemos pronto.',
             'respond_to_groups' => '1',
+            'notify_on_fallback' => '1',
+            'fallback_alert_phone' => '+54 2944360712',
         ])->assertRedirect(route('bot.settings.edit'));
 
         Storage::disk('local')->assertExists('bot-settings.json');
@@ -34,6 +36,8 @@ class BotSettingsTest extends TestCase
         $this->assertSame('Te respondemos pronto.', $settings['default_message']);
         $this->assertTrue($settings['respond_to_groups']);
         $this->assertTrue($settings['use_generative_ai']);
+        $this->assertTrue($settings['notify_on_fallback']);
+        $this->assertSame('+54 2944360712', $settings['fallback_alert_phone']);
     }
 
 
@@ -53,6 +57,8 @@ class BotSettingsTest extends TestCase
             ->assertSee('Respuesta de /whatsapp/status')
             ->assertSee('Olvidar sesión y pedir QR nuevo')
             ->assertSee('Volver a Administracion')
+            ->assertSee('Reenviar mensajes que el bot no pudo interpretar')
+            ->assertSee('+54 2944360712')
             ->assertDontSee('Responder con IA generativa (Groq)')
             ->assertDontSee('Groq redacta la respuesta usando la base de conocimiento')
             ->assertSee('Respuestas: predefinidas, con encauzamiento automático cuando haga falta');
@@ -105,6 +111,8 @@ class BotSettingsTest extends TestCase
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
             'use_generative_ai' => false,
+            'notify_on_fallback' => true,
+            'fallback_alert_phone' => '+54 2944360712',
         ]));
 
         $this->mock(RagBotService::class, function ($mock): void {
@@ -131,6 +139,8 @@ class BotSettingsTest extends TestCase
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
             'use_generative_ai' => false,
+            'notify_on_fallback' => true,
+            'fallback_alert_phone' => '+54 2944360712',
         ]));
 
         $this->mock(RagBotService::class, function ($mock): void {
@@ -157,6 +167,8 @@ class BotSettingsTest extends TestCase
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
             'use_generative_ai' => false,
+            'notify_on_fallback' => true,
+            'fallback_alert_phone' => '+54 2944360712',
         ]));
 
         $this->mock(RagBotService::class, function ($mock): void {
@@ -168,10 +180,8 @@ class BotSettingsTest extends TestCase
 
         $this->mock(WhatsAppGatewayService::class, function ($mock): void {
             $mock->shouldReceive('sendText')->once()->withArgs(function (string $phone, string $text): bool {
-                return $phone === '2944360712'
-                    && str_contains($text, 'no encontré información confirmada')
-                    && str_contains($text, 'Usuario: 5492944000000')
-                    && str_contains($text, 'Consulta: Consulta inexistente');
+                return $phone === '542944360712'
+                    && $text === "No he podido descifrar la intencion del siguiente mensaje:\nConsulta inexistente";
             });
             $mock->shouldReceive('sendText')->once()->with('5492944000000', 'No tengo esa información confirmada.');
         });
@@ -203,6 +213,37 @@ class BotSettingsTest extends TestCase
                 'message' => ['conversation' => 'Hola grupo'],
             ],
         ])->assertOk()->assertJson(['status' => 'ignored']);
+    }
+
+    public function test_webhook_does_not_alert_when_fallback_notifications_are_disabled(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('bot-settings.json', json_encode([
+            'response_mode' => 'bot',
+            'default_message' => 'Mensaje fijo.',
+            'respond_to_groups' => false,
+            'use_generative_ai' => false,
+            'notify_on_fallback' => false,
+            'fallback_alert_phone' => '+54 2944360712',
+        ]));
+
+        $this->mock(RagBotService::class, function ($mock): void {
+            $mock->shouldReceive('answer')->once()->andReturn([
+                'answer' => 'No tengo esa información confirmada.',
+                'source_type' => 'fallback',
+            ]);
+        });
+
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('sendText')->once()->with('5492944000000', 'No tengo esa información confirmada.');
+        });
+
+        $this->postJson(route('whatsapp.webhook'), [
+            'data' => [
+                'key' => ['fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net'],
+                'message' => ['conversation' => 'Consulta inexistente'],
+            ],
+        ])->assertOk()->assertJson(['status' => 'sent']);
     }
 
     public function test_settings_require_login(): void

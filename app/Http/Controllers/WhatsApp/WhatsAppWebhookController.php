@@ -14,8 +14,6 @@ use Throwable;
 
 class WhatsAppWebhookController extends Controller
 {
-    private const KNOWLEDGE_FALLBACK_ALERT_PHONE = '2944360712';
-
     public function __construct(
         private readonly RagBotService $ragBotService,
         private readonly WhatsAppGatewayService $whatsAppGatewayService,
@@ -44,8 +42,8 @@ class WhatsAppWebhookController extends Controller
                 $botResponse = $this->ragBotService->answer($message['text'], null, $settings['use_generative_ai']);
                 $answer = $botResponse['answer'];
 
-                if (($botResponse['source_type'] ?? null) === 'fallback') {
-                    $this->sendKnowledgeFallbackAlert($message['phone'], $message['text']);
+                if (($botResponse['source_type'] ?? null) === 'fallback' && $settings['notify_on_fallback']) {
+                    $this->sendKnowledgeFallbackAlert($settings['fallback_alert_phone'], $message['text']);
                 }
             }
 
@@ -62,13 +60,16 @@ class WhatsAppWebhookController extends Controller
         }
     }
 
-    private function sendKnowledgeFallbackAlert(string $userPhone, string $question): void
+    private function sendKnowledgeFallbackAlert(string $phone, string $message): void
     {
-        $alert = "Aviso bot refugio: no encontré información confirmada en la base de conocimiento para responder esta consulta.\n"
-            ."Usuario: {$userPhone}\n"
-            ."Consulta: {$question}";
+        $alert = "No he podido descifrar la intencion del siguiente mensaje:\n{$message}";
 
-        $this->whatsAppGatewayService->sendText(self::KNOWLEDGE_FALLBACK_ALERT_PHONE, $alert);
+        $this->whatsAppGatewayService->sendText($this->normalizePhone($phone), $alert);
+    }
+
+    private function normalizePhone(string $phone): string
+    {
+        return preg_replace('/\\D+/', '', $phone) ?? $phone;
     }
 
     public function status(Request $request): JsonResponse|RedirectResponse
