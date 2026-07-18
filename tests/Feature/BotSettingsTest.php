@@ -211,6 +211,15 @@ class BotSettingsTest extends TestCase
             ->assertRedirect(route('bot.settings.login'));
     }
 
+    public function test_home_page_requires_login(): void
+    {
+        $this->get('/')
+            ->assertRedirect(route('bot.settings.login'));
+
+        $this->authenticatedRequest()->get('/')
+            ->assertOk();
+    }
+
     public function test_valid_credentials_grant_access_to_settings(): void
     {
         Storage::fake('local');
