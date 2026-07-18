@@ -21,7 +21,7 @@ class BotSettingsTest extends TestCase
     {
         Storage::fake('local');
 
-        $this->put(route('bot.settings.update'), [
+        $this->authenticatedRequest()->put(route('bot.settings.update'), [
             'response_mode' => 'default',
             'default_message' => 'Te respondemos pronto.',
             'respond_to_groups' => '1',
@@ -46,7 +46,7 @@ class BotSettingsTest extends TestCase
             $mock->shouldNotReceive('qr');
         });
 
-        $this->get('/whatsapp/settings')
+        $this->authenticatedRequest()->get('/whatsapp/settings')
             ->assertOk()
             ->assertDontSee('WhatsApp Admin')
             ->assertSee('Conectado')
@@ -80,7 +80,7 @@ class BotSettingsTest extends TestCase
             $mock->shouldReceive('qr')->once()->andReturn(['base64' => 'data:image/png;base64,abc']);
         });
 
-        $this->get('/whatsapp/settings')
+        $this->authenticatedRequest()->get('/whatsapp/settings')
             ->assertOk()
             ->assertSee('Conectar con QR')
             ->assertSee('data:image/png;base64,abc');
@@ -92,7 +92,7 @@ class BotSettingsTest extends TestCase
             $mock->shouldReceive('logout')->once()->andReturn(['status' => 'success']);
         });
 
-        $this->post(route('bot.settings.forget-session'))
+        $this->authenticatedRequest()->post(route('bot.settings.forget-session'))
             ->assertRedirect(route('bot.settings.edit'))
             ->assertSessionHas('status', 'Sesión de WhatsApp olvidada. QR nuevo disponible para reconexión.');
     }
@@ -203,5 +203,47 @@ class BotSettingsTest extends TestCase
                 'message' => ['conversation' => 'Hola grupo'],
             ],
         ])->assertOk()->assertJson(['status' => 'ignored']);
+    }
+
+    public function test_settings_require_login(): void
+    {
+        $this->get(route('bot.settings.edit'))
+            ->assertRedirect(route('bot.settings.login'));
+    }
+
+    public function test_valid_credentials_grant_access_to_settings(): void
+    {
+        Storage::fake('local');
+
+        $this->mock(WhatsAppGatewayService::class, function ($mock): void {
+            $mock->shouldReceive('status')->once()->andReturn(['instance' => ['state' => 'open']]);
+            $mock->shouldNotReceive('qr');
+        });
+
+        $this->post(route('bot.settings.login.store'), [
+            'username' => 'chatbot',
+            'password' => 'frias',
+        ])->assertRedirect(route('bot.settings.edit'));
+
+        $this->get(route('bot.settings.edit'))->assertOk();
+    }
+
+    public function test_invalid_credentials_do_not_grant_access_to_settings(): void
+    {
+        $this->from(route('bot.settings.login'))
+            ->post(route('bot.settings.login.store'), [
+                'username' => 'chatbot',
+                'password' => 'incorrecta',
+            ])
+            ->assertRedirect(route('bot.settings.login'))
+            ->assertSessionHasErrors('username');
+
+        $this->get(route('bot.settings.edit'))
+            ->assertRedirect(route('bot.settings.login'));
+    }
+
+    private function authenticatedRequest(): static
+    {
+        return $this->withSession(['bot-settings.authenticated' => true]);
     }
 }
