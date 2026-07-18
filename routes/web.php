@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return view('welcome');
-});
+})->middleware('bot.settings.auth');
 
 Route::redirect('bot/settings', '/whatsapp/settings');
 
