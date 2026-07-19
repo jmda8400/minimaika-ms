@@ -19,20 +19,23 @@ class RagBotServiceTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_groq_only_classifies_to_a_prewritten_response(): void
+    public function test_rag_uses_the_model_only_after_a_confident_retrieval(): void
     {
         $knowledgeBase = Mockery::mock(KnowledgeBaseService::class);
-        $knowledgeBase->shouldNotReceive('search');
+        $knowledgeBase->shouldReceive('search')->once()->with('¿Dónde queda el refugio?', 8)->andReturn([[
+            'filename' => 'ubicacion.md', 'chunk_index' => 0,
+            'content' => 'El Refugio Agostino Rocca está en Pampa Linda, en el Cerro Tronador.',
+            'score' => 0.9, 'category' => 'ubicacion', 'topic' => 'Ubicación', 'location' => 'Pampa Linda',
+        ]]);
 
         $groq = Mockery::mock(GroqChatService::class);
         $groq->shouldReceive('generate')
             ->once()
             ->withArgs(function (string $systemPrompt, string $userPrompt): bool {
-                return str_contains($systemPrompt, 'No redactes respuestas')
-                    && str_contains($userPrompt, 'response_key')
-                    && str_contains($userPrompt, 'horario_camino_pampa_linda');
+                return str_contains($systemPrompt, 'exclusivamente el contexto')
+                    && str_contains($userPrompt, '¿Dónde queda el refugio?');
             })
-            ->andReturn('{"response_key":"horario_camino_pampa_linda"}');
+            ->andReturn('Está en Pampa Linda, en el Cerro Tronador.');
 
         $service = new RagBotService(
             $knowledgeBase,
@@ -41,10 +44,10 @@ class RagBotServiceTest extends TestCase
             new PrewrittenResponseService(),
         );
 
-        $response = $service->answer('A qué hora se puede pasar?', null, true);
+        $response = $service->answer('¿Dónde queda el refugio?', null, true);
 
-        $this->assertSame('prewritten_groq', $response['source_type']);
-        $this->assertStringContainsString('Subida únicamente', $response['answer']);
+        $this->assertSame('rag', $response['source_type']);
+        $this->assertSame('Está en Pampa Linda, en el Cerro Tronador.', $response['answer']);
     }
 
     public function test_tac_question_uses_prewritten_gluten_answer_without_groq(): void

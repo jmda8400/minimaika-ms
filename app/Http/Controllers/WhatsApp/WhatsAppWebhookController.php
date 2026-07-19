@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 class WhatsAppWebhookController extends Controller
@@ -35,16 +36,18 @@ class WhatsAppWebhookController extends Controller
             return response()->json(['status' => 'ignored']);
         }
 
+        if ($this->wasAlreadyProcessed($message)) {
+            Log::info('Webhook duplicado ignorado.', ['instance_id' => $message['instance_id'], 'message_id' => $message['message_id']]);
+
+            return response()->json(['status' => 'duplicate']);
+        }
+
         try {
             if ($settings['response_mode'] === 'default') {
                 $answer = $settings['default_message'];
             } else {
-                $botResponse = $this->ragBotService->answer($message['text'], null, $settings['use_generative_ai']);
+                $botResponse = $this->ragBotService->answer($message['text'], null, $settings['use_generative_ai'], $message['phone']);
                 $answer = $botResponse['answer'];
-
-                if (($botResponse['source_type'] ?? null) === 'fallback' && $settings['notify_on_fallback']) {
-                    $this->sendKnowledgeFallbackAlert($settings['fallback_alert_phone'], $message['text']);
-                }
             }
 
             $this->whatsAppGatewayService->sendText($message['phone'], $answer);
@@ -60,18 +63,6 @@ class WhatsAppWebhookController extends Controller
         }
     }
 
-    private function sendKnowledgeFallbackAlert(string $phone, string $message): void
-    {
-        $alert = "No he podido descifrar la intencion del siguiente mensaje:\n{$message}";
-
-        $this->whatsAppGatewayService->sendText($this->normalizePhone($phone), $alert);
-    }
-
-    private function normalizePhone(string $phone): string
-    {
-        return preg_replace('/\\D+/', '', $phone) ?? $phone;
-    }
-
     public function status(Request $request): JsonResponse|RedirectResponse
     {
         if (! $request->wantsJson()) {
@@ -83,7 +74,7 @@ class WhatsAppWebhookController extends Controller
 
     /**
      * @param array<string,mixed> $payload
-     * @return array{phone:string,text:string,is_group:bool}|null
+     * @return array{phone:string,text:string,is_group:bool,instance_id:string,message_id:?string}|null
      */
     private function extractIncomingMessage(array $payload, bool $respondToGroups): ?array
     {
@@ -107,7 +98,21 @@ class WhatsAppWebhookController extends Controller
             'phone' => $isGroup ? $remoteJid : (preg_replace('/\D+/', '', $remoteJid) ?? $remoteJid),
             'text' => $text,
             'is_group' => $isGroup,
+            'instance_id' => (string) (data_get($payload, 'instanceId') ?? data_get($payload, 'instance') ?? config('services.whatsapp_web.instance')),
+            'message_id' => data_get($payload, 'data.key.id') ?? data_get($payload, 'key.id') ?? data_get($payload, 'messageId'),
         ];
+    }
+
+    /** @param array{instance_id:string,message_id:?string} $message */
+    private function wasAlreadyProcessed(array $message): bool
+    {
+        if (! is_string($message['message_id']) || $message['message_id'] === '') {
+            return false;
+        }
+
+        $key = 'whatsapp-webhook:'.sha1($message['instance_id'].'|'.$message['message_id']);
+
+        return ! Cache::add($key, true, now()->addDay());
     }
 
     private function isValidWebhookSecret(Request $request): bool

@@ -123,7 +123,7 @@ class PrewrittenResponseService
             'agua_sendero_subida' => [
                 'title' => 'HAY AGUA EN EL SENDERO DE SUBIDA',
                 'response' => 'En el km 3 del sendero cruzás el río Castaño Overa. Luego, desde el km 5 hasta el km 9 del trayecto de subida hacia el refugio, siempre tenés muy cerca el río Alerce a tu derecha. Desde el km 9 hacia arriba vas a cruzar varios puntos donde pasan cursos de agua para recargar.',
-                'keywords' => ['agua sendero', 'agua subida', 'recargar agua', 'rio castaño overa', 'río castaño overa', 'rio alerce', 'río alerce'],
+                'keywords' => ['agua sendero', 'agua durante el sendero', 'hay agua durante el sendero', 'agua subida', 'recargar agua', 'rio castaño overa', 'río castaño overa', 'rio alerce', 'río alerce'],
             ],
             'acampe' => [
                 'title' => 'ACAMPE, ACAMPAR, CAMPING',
@@ -168,7 +168,7 @@ class PrewrittenResponseService
             'agua_potable' => [
                 'title' => 'EL AGUA ES POTABLE',
                 'response' => 'Sí, el agua es potable.',
-                'keywords' => ['agua potable', 'tomar agua', 'agua se puede tomar'],
+                'keywords' => ['agua potable', 'agua refugio', 'agua en el refugio', 'hay agua en el refugio', 'tomar agua', 'agua se puede tomar'],
             ],
             'calefaccion' => [
                 'title' => 'CALEFACCION',

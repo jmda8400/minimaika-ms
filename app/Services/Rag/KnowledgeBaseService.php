@@ -20,7 +20,7 @@ class KnowledgeBaseService
     }
 
     /**
-     * @return array<int, array{filename:string, chunk_index:int, content:string, score:float}>
+     * @return array<int, array{filename:string, chunk_index:int, content:string, score:float,category:string,topic:string,location:?string}>
      */
     public function search(string $question, int $limit = 5): array
     {
@@ -57,6 +57,9 @@ class KnowledgeBaseService
                 'chunk_index' => $chunk['chunk_index'],
                 'content' => $chunk['content'],
                 'score' => round($score, 4),
+                'category' => $chunk['category'],
+                'topic' => $chunk['topic'],
+                'location' => $chunk['location'],
             ];
         }
 
@@ -66,7 +69,7 @@ class KnowledgeBaseService
     }
 
     /**
-     * @return array<int, array{filename:string, chunk_index:int, content:string}>
+     * @return array<int, array{filename:string, chunk_index:int, content:string,category:string,topic:string,location:?string}>
      */
     private function loadChunks(): array
     {
@@ -96,6 +99,7 @@ class KnowledgeBaseService
                 continue;
             }
 
+            $metadata = $this->metadataFor($file, $content);
             $fileChunks = $this->splitInChunks($content);
 
             foreach ($fileChunks as $index => $chunkContent) {
@@ -103,6 +107,7 @@ class KnowledgeBaseService
                     'filename' => $file,
                     'chunk_index' => $index,
                     'content' => $chunkContent,
+                    ...$metadata,
                 ];
             }
         }
@@ -115,30 +120,32 @@ class KnowledgeBaseService
      */
     private function splitInChunks(string $content, int $chunkSize = self::DEFAULT_CHUNK_SIZE, int $overlap = self::DEFAULT_CHUNK_OVERLAP): array
     {
-        $words = preg_split('/\s+/u', trim($content)) ?: [];
-
-        if ($words === []) {
-            return [];
-        }
-
+        // Preserve Markdown sections so a chunk has a coherent answer instead
+        // of arbitrary words from two unrelated FAQ entries.
+        $sections = preg_split('/(?=^#{1,2}\s)/mu', trim($content)) ?: [];
         $chunks = [];
-        $step = max(1, $chunkSize - $overlap);
-
-        for ($start = 0; $start < count($words); $start += $step) {
-            $slice = array_slice($words, $start, $chunkSize);
-
-            if ($slice === []) {
-                continue;
-            }
-
-            $chunks[] = trim(implode(' ', $slice));
-
-            if (($start + $chunkSize) >= count($words)) {
-                break;
+        foreach ($sections as $section) {
+            $words = preg_split('/\s+/u', trim($section)) ?: [];
+            for ($start = 0; $start < count($words); $start += max(1, $chunkSize - $overlap)) {
+                $chunks[] = implode(' ', array_slice($words, $start, $chunkSize));
+                if ($start + $chunkSize >= count($words)) {
+                    break;
+                }
             }
         }
 
-        return $chunks;
+        return array_values(array_filter(array_map('trim', $chunks)));
+    }
+
+    /** @return array{category:string,topic:string,location:?string} */
+    private function metadataFor(string $filename, string $content): array
+    {
+        preg_match('/^#\s+(.+)$/m', $content, $title);
+        $topic = trim($title[1] ?? pathinfo($filename, PATHINFO_FILENAME));
+        $category = preg_replace('/^\d+-/', '', pathinfo($filename, PATHINFO_FILENAME)) ?: 'general';
+        $location = str_contains(mb_strtolower($content), 'pampa linda') ? 'Pampa Linda' : (str_contains(mb_strtolower($content), 'refugio') ? 'Refugio Agostino Rocca' : null);
+
+        return compact('category', 'topic', 'location');
     }
 
     /**

@@ -95,21 +95,6 @@
                     @error('respond_to_groups')<div class="error">{{ $message }}</div>@enderror
                 </div>
 
-                <div class="field">
-                    <label class="checkbox">
-                        <input type="checkbox" name="notify_on_fallback" value="1" @checked(old('notify_on_fallback', $settings['notify_on_fallback']))>
-                        <span><strong>Reenviar mensajes que el bot no pudo interpretar</strong><span class="hint">Envía una alerta al número indicado cuando no se encuentra un intent o una respuesta confiable.</span></span>
-                    </label>
-                    @error('notify_on_fallback')<div class="error">{{ $message }}</div>@enderror
-                </div>
-
-                <div class="field">
-                    <label for="fallback_alert_phone">Número que recibe las alertas</label>
-                    <input id="fallback_alert_phone" name="fallback_alert_phone" type="text" inputmode="tel" value="{{ old('fallback_alert_phone', $settings['fallback_alert_phone']) }}" placeholder="+54 2944360712">
-                    <p class="hint">Mensaje enviado: “No he podido descifrar la intencion del siguiente mensaje:” seguido del mensaje del cliente.</p>
-                    @error('fallback_alert_phone')<div class="error">{{ $message }}</div>@enderror
-                </div>
-
                 <div class="summary">
                     <strong>Estado actual</strong>
                     Modo: {{ $settings['response_mode'] === 'default' ? 'mensaje por defecto' : 'bot' }} · Respuestas: predefinidas, con encauzamiento automático cuando haga falta · Grupos: {{ $settings['respond_to_groups'] ? 'habilitados' : 'ignorados' }}
