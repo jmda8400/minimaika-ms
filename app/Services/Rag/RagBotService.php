@@ -9,20 +9,13 @@ use Illuminate\Support\Facades\Log;
 
 class RagBotService
 {
-    private const DEFAULT_TOP_K = 3;
+    private const INITIAL_CANDIDATES = 8;
     private const MAX_FRAGMENTS = 3;
-    private const MAX_FRAGMENT_WORDS = 240;
-    private const MAX_CONTEXT_WORDS = 700;
     private const MAX_HISTORY_ITEMS = 5;
-    private const MIN_HISTORY_ITEMS = 3;
-    private const FALLBACK_MESSAGE = 'No tengo esa información confirmada en la base de conocimiento del refugio. Ya di aviso al refugio para que puedan revisar tu consulta y evitar darte un dato incorrecto.';
-    private const RESERVATION_GUIDANCE = 'Entiendo. Para ayudarte con eso necesito que tengas a mano el código de reserva o los datos con los que hiciste la reserva. Con eso se puede revisar el caso y ver si corresponde cancelación, reprogramación o reembolso según las condiciones vigentes.';
-    private const RESCHEDULE_LINK = 'https://www.refugioagostinorocca.com/reschedule';
+    private const FALLBACK_MESSAGE = 'No pude entender tu consulta.';
 
-    private const SYSTEM_PROMPT = 'Eres el asistente virtual del Refugio Agostino Rocca. Respondés consultas por WhatsApp en español, breve, claro y directo. No saludes en cada respuesta: solo saluda si el usuario saluda o si es el primer mensaje de la conversación. Usá únicamente información del contexto e historial provistos. Si falta un dato para avanzar, pedilo de forma concreta. No inventes datos ni condiciones. No uses frases genéricas como "puedo ayudarte con información sobre...". Si el usuario pide cancelación, reprogramación, reembolso o temas de reserva, orientá al siguiente paso concreto. Si la consulta actual es aclaración/seguimiento, interpretala con el historial y reformulá más simple sin repetir todo. Máximo 120 palabras, salvo que el usuario pida detalle.';
-
-    /** @var array<int,array{question:string,answer:string}> */
-    private array $history = [];
+    /** @var array<string,array<int,array{question:string,answer:string}>> */
+    private array $historyByConversation = [];
 
     public function __construct(
         private readonly KnowledgeBaseService $knowledgeBaseService,
@@ -32,305 +25,160 @@ class RagBotService
     ) {
     }
 
-    public function answer(string $question, ?int $limit = null, bool $useGenerativeAi = true): array
+    /**
+     * Each invocation deliberately selects exactly one branch: local intent,
+     * confident RAG, or fallback. Conversation history is keyed by phone.
+     *
+     * @return array{answer:string,sources:array,fragments:array,source_type:string,prompt:string}
+     */
+    public function answer(string $question, ?int $limit = null, bool $useGenerativeAi = true, ?string $conversationId = null): array
     {
-        Log::info('Pregunta recibida en bot RAG.', ['question' => $question]);
+        $conversationId ??= '__default__';
+        $question = trim($question);
+        Log::info('Pregunta recibida en bot.', ['question' => $question, 'conversation_id' => $conversationId]);
+
+        if (($clarification = $this->ambiguousResponse($question)) !== null) {
+            return $this->finish($conversationId, $question, $clarification, [], 'clarification');
+        }
 
         $intent = $this->intentDetectorService->detect($question);
-        Log::info('Intent detectado.', ['intent' => $intent['intent'] ?? 'none']);
+        if ($intent !== null && $intent['response'] !== null && ! $intent['use_rag']) {
+            Log::info('Rama local seleccionada.', ['intent' => $intent['intent']]);
 
-        if ($intent !== null && in_array($intent['intent'], ['cancel_reservation', 'refund_request'], true)) {
-            Log::info('Se usó respuesta preescrita por intent de reclamo/reserva.', ['intent' => $intent['intent']]);
-
-            return $this->finalizePrewrittenResponse($question, 'reclamo_reserva_terminos', 'prewritten_intent', '', ['respuesta preescrita']);
-        }
-
-        if ($intent !== null && $intent['intent'] === 'reschedule_reservation') {
-            Log::info('Se usó respuesta preescrita por intent de reprogramación.', ['intent' => $intent['intent']]);
-
-            return $this->finalizePrewrittenResponse($question, 'reprogramar_reserva', 'prewritten_intent', '', ['respuesta preescrita']);
-        }
-
-        if ($intent !== null && $intent['intent'] === 'clarification' && $this->recentHistory() !== []) {
-            Log::info('Se usó historial para aclaración sin redacción generativa.', ['history_items' => count($this->recentHistory())]);
-            $history = $this->recentHistory();
-            $lastAnswer = (string) ($history[array_key_last($history)]['answer'] ?? self::FALLBACK_MESSAGE);
-
-            return $this->finalizeResponse($question, $lastAnswer, [], 'history', '', ['historial']);
-        }
-
-        if ($this->shouldAnswerLocally($intent)) {
-            Log::info('Se usó respuesta local por intent.', ['intent' => $intent['intent']]);
-            return $this->finalizeResponse($question, $intent['response'], [], 'intent', '', ['respuesta automática']);
+            return $this->finish($conversationId, $question, $intent['response'], [], 'intent');
         }
 
         $prewrittenKey = $this->prewrittenResponseService->detect($question);
         if ($prewrittenKey !== null) {
-            Log::info('Se usó respuesta preescrita por palabras clave.', ['response_key' => $prewrittenKey]);
+            Log::info('Rama FAQ local seleccionada.', ['response_key' => $prewrittenKey]);
 
-            return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_keyword', '', ['respuesta preescrita']);
+            return $this->finish($conversationId, $question, (string) $this->prewrittenResponseService->get($prewrittenKey), [], 'prewritten');
         }
 
-        if ($useGenerativeAi) {
-            $prewrittenKey = $this->classifyPrewrittenResponse($question);
-            if ($prewrittenKey !== null) {
-                Log::info('Groq encauzó a respuesta preescrita.', ['response_key' => $prewrittenKey]);
+        if ($this->isContextualFollowUp($question) && ($history = $this->recentHistory($conversationId)) !== []) {
+            $previous = $history[array_key_last($history)]['answer'];
+            Log::info('Rama de contexto seleccionada.', ['conversation_id' => $conversationId, 'history_items' => count($history)]);
 
-                return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_groq', '', ['respuesta preescrita']);
-            }
+            return $this->finish($conversationId, $question, $previous, [], 'history');
         }
 
-        $topK = min(self::MAX_FRAGMENTS, $this->resolveTopK($limit));
-        $rawFragments = $this->retrieveRelevantChunks($question, $topK);
-        Log::info('Cantidad de fragmentos recuperados.', ['count' => count($rawFragments)]);
+        $candidates = $this->knowledgeBaseService->search($question, $this->resolveCandidateLimit($limit));
+        $fragments = $this->rerank($question, $candidates);
+        $bestScore = (float) ($fragments[0]['rerank_score'] ?? 0);
+        Log::info('Recuperación RAG evaluada.', [
+            'question' => $question,
+            'candidate_scores' => array_map(static fn (array $fragment): array => [
+                'file' => $fragment['filename'], 'chunk' => $fragment['chunk_index'], 'retrieval_score' => $fragment['score'], 'rerank_score' => $fragment['rerank_score'],
+            ], $fragments),
+            'selected_fragment' => $fragments[0]['content'] ?? null,
+            'best_score' => $bestScore,
+            'threshold' => $this->confidenceThreshold(),
+        ]);
 
-        $fragments = $this->prepareFragments($rawFragments);
-        $prompt = $this->buildPrompt($question, $fragments);
+        if ($fragments === [] || $bestScore < $this->confidenceThreshold()) {
+            Log::info('Rama fallback seleccionada por confianza RAG insuficiente.', ['best_score' => $bestScore]);
 
-        if ($fragments === []) {
-            Log::warning('Se usó fallback por falta de fragmentos relevantes.', ['fallback_reason' => 'no_fragments']);
-
-            return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, [], 'fallback', $prompt, []);
+            return $this->finish($conversationId, $question, self::FALLBACK_MESSAGE, [], 'fallback');
         }
 
-        if (! $useGenerativeAi) {
-            $prewrittenKey = $this->detectPrewrittenFromFragments($question, $fragments);
-            if ($prewrittenKey !== null) {
-                Log::info('Se usó respuesta preescrita sin IA generativa.', ['response_key' => $prewrittenKey]);
+        $sources = array_map(static fn (array $fragment): array => [
+            'filename' => $fragment['filename'], 'chunk_index' => $fragment['chunk_index'], 'category' => $fragment['category'] ?? null,
+            'topic' => $fragment['topic'] ?? null, 'location' => $fragment['location'] ?? null,
+        ], $fragments);
+        $answer = $this->extractiveAnswer($fragments);
+        $prompt = $this->buildPrompt($question, $fragments, $this->recentHistory($conversationId));
 
-                return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_rag_extractive', $prompt, $this->sourcesFromFragments($fragments), $fragments);
-            }
-
-            Log::warning('Se usó fallback sin IA generativa porque no se pudo encauzar a una respuesta preescrita.', ['fallback_reason' => 'no_prewritten_match']);
-
-            return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, $fragments, 'fallback', $prompt, $this->sourcesFromFragments($fragments));
+        if ($useGenerativeAi && ($generated = $this->groqChatService->generate('Respondés consultas del Refugio Agostino Rocca usando exclusivamente el contexto entregado.', $prompt)) !== null) {
+            $answer = $generated;
         }
 
-        $prewrittenKey = $this->detectPrewrittenFromFragments($question, $fragments);
-        if ($prewrittenKey !== null) {
-            Log::info('Se usó respuesta preescrita a partir del contexto RAG.', ['response_key' => $prewrittenKey]);
+        Log::info('Rama RAG seleccionada.', ['best_score' => $bestScore, 'fragment_count' => count($fragments)]);
 
-            return $this->finalizePrewrittenResponse($question, $prewrittenKey, 'prewritten_rag', $prompt, $this->sourcesFromFragments($fragments), $fragments);
+        return $this->finish($conversationId, $question, $answer, $fragments, 'rag', $prompt, $sources);
+    }
+
+    private function ambiguousResponse(string $question): ?string
+    {
+        $normalized = $this->normalize($question);
+
+        return match ($normalized) {
+            'agua' => '¿Te referís al agua potable del refugio, al agua caliente para mate o al agua disponible durante el sendero?',
+            'mate' => '¿Querés saber si hay agua caliente para mate en el refugio o si podés llevar mate durante el sendero?',
+            'camino' => '¿Consultás por cómo llegar a Pampa Linda, los horarios del camino o la senda hasta el refugio?',
+            'precio', 'precios' => '¿Querés consultar el precio del pernocte, las comidas, la ducha u otro servicio?',
+            'reserva', 'reservar' => '¿Necesitás saber cómo reservar, modificar una reserva o consultar disponibilidad?',
+            default => null,
+        };
+    }
+
+    private function isContextualFollowUp(string $question): bool
+    {
+        $normalized = $this->normalize($question);
+
+        return str_starts_with($normalized, 'y ') || str_starts_with($normalized, 'tambien ')
+            || in_array($normalized, ['y cuanto cuesta', 'tambien en invierno', 'y en invierno'], true);
+    }
+
+    private function rerank(string $question, array $candidates): array
+    {
+        $tokens = array_values(array_filter(explode(' ', $this->normalize($question))));
+        foreach ($candidates as &$candidate) {
+            $content = $this->normalize($candidate['content']);
+            $hits = count(array_filter($tokens, static fn (string $token): bool => mb_strlen($token) > 1 && str_contains($content, $token)));
+            $directness = $hits / max(1, count($tokens));
+            $candidate['rerank_score'] = round(((float) $candidate['score'] * 0.65) + ($directness * 0.35), 4);
         }
+        unset($candidate);
+        usort($candidates, static fn (array $a, array $b): int => $b['rerank_score'] <=> $a['rerank_score']);
 
-        Log::warning('Se usó fallback porque no se pudo encauzar a una respuesta preescrita.', ['fallback_reason' => 'no_prewritten_match']);
-
-        return $this->finalizeResponse($question, self::FALLBACK_MESSAGE, $fragments, 'fallback', $prompt, $this->sourcesFromFragments($fragments));
+        return array_slice($candidates, 0, self::MAX_FRAGMENTS);
     }
 
-    private function finalizePrewrittenResponse(string $question, string $key, string $sourceType, string $prompt, array $sources, array $fragments = []): array
+    private function extractiveAnswer(array $fragments): string
     {
-        $answer = $this->prewrittenResponseService->get($key) ?? self::FALLBACK_MESSAGE;
+        $content = trim((string) ($fragments[0]['content'] ?? ''));
+        $sentences = preg_split('/(?<=[.!?])\s+/u', $content) ?: [];
 
-        return $this->finalizeResponse($question, $answer, $fragments, $sourceType, $prompt, $sources);
+        return trim(implode(' ', array_slice($sentences, 0, 3))) ?: self::FALLBACK_MESSAGE;
     }
 
-    private function classifyPrewrittenResponse(string $question): ?string
+    private function buildPrompt(string $question, array $fragments, array $history): string
     {
-        $prompt = "Mensaje del cliente:\n{$question}\n\n"
-            ."Elegí una sola clave de esta lista de respuestas preescritas:\n"
-            .$this->prewrittenResponseService->keysForPrompt()."\n\n"
-            ."Respondé únicamente JSON válido con este formato: {\"response_key\":\"clave\"}. "
-            ."Si ninguna respuesta corresponde claramente, usá {\"response_key\":null}. No redactes una respuesta al cliente.";
+        $context = implode("\n\n", array_map(static fn (array $fragment): string => $fragment['content'], $fragments));
+        $historyText = implode("\n", array_map(static fn (array $item): string => "Usuario: {$item['question']}\nBot: {$item['answer']}", $history));
 
-        $raw = $this->groqChatService->generate(
-            'Clasificás mensajes de WhatsApp del Refugio Agostino Rocca. No redactes respuestas: solo elegí una clave preescrita o null.',
-            $prompt
-        );
-
-        if ($raw === null) {
-            return null;
-        }
-
-        $decoded = json_decode($raw, true);
-        $key = is_array($decoded) ? ($decoded['response_key'] ?? null) : null;
-
-        if (! is_string($key) || $key === '' || $key === 'null') {
-            return null;
-        }
-
-        return $this->prewrittenResponseService->isValidKey($key) ? $key : null;
+        return "Pregunta: {$question}\n\nHistorial aplicable:\n".($historyText ?: '(ninguno)')."\n\nContexto:\n{$context}\n\nRespondé breve, en español, solo con información del contexto.";
     }
 
-    private function detectPrewrittenFromFragments(string $question, array $fragments): ?string
+    private function finish(string $conversationId, string $question, string $answer, array $fragments, string $sourceType, string $prompt = '', array $sources = []): array
     {
-        $key = $this->prewrittenResponseService->detect($question);
-        if ($key !== null) {
-            return $key;
-        }
+        $this->historyByConversation[$conversationId][] = ['question' => $question, 'answer' => $answer];
+        $this->historyByConversation[$conversationId] = array_slice($this->historyByConversation[$conversationId], -self::MAX_HISTORY_ITEMS);
 
-        foreach ($fragments as $fragment) {
-            $key = $this->prewrittenResponseService->detect($fragment['content'] ?? '');
-            if ($key !== null) {
-                return $key;
-            }
-        }
-
-        return null;
+        return compact('answer', 'sources', 'fragments', 'sourceType', 'prompt') + ['source_type' => $sourceType];
     }
 
-    private function buildExtractiveAnswer(array $fragments, ?array $intent): string
+    private function recentHistory(string $conversationId): array
     {
-        $answer = $this->truncateWords($fragments[0]['content'] ?? self::FALLBACK_MESSAGE, 90);
-
-        if ($answer === '') {
-            $answer = self::FALLBACK_MESSAGE;
-        }
-
-        if ($intent !== null && $intent['prepend_response'] !== null) {
-            return $intent['prepend_response']."\n\n".$answer;
-        }
-
-        return $answer;
+        return $this->historyByConversation[$conversationId] ?? [];
     }
 
-    private function shouldAnswerLocally(?array $intent): bool
+    private function resolveCandidateLimit(?int $limit): int
     {
-        if ($intent === null || $intent['response'] === null) {
-            return false;
-        }
-
-        return in_array($intent['intent'], ['saludo', 'despedida', 'agradecimiento', 'fallback_conversacional', 'comida_sin_gluten'], true);
+        return $limit === null ? max(1, (int) env('RAG_INITIAL_TOP_K', self::INITIAL_CANDIDATES)) : max(1, $limit);
     }
 
-    private function finalizeResponse(string $question, string $answer, array $fragments, string $sourceType, string $prompt, array $sources): array
+    private function confidenceThreshold(): float
     {
-        $this->pushHistory($question, $answer);
-
-        return [
-            'answer' => $answer,
-            'sources' => $sources,
-            'fragments' => $fragments,
-            'source_type' => $sourceType,
-            'prompt' => $prompt,
-        ];
+        return (float) env('RAG_CONFIDENCE_THRESHOLD', 0.55);
     }
 
-    private function retrieveRelevantChunks(string $question, int $topK): array
+    private function normalize(string $text): string
     {
-        return $this->knowledgeBaseService->search($question, $topK);
-    }
+        $text = mb_strtolower(trim($text));
+        $text = strtr($text, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u']);
+        $text = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? '';
 
-    private function buildPrompt(string $question, array $fragments): string
-    {
-        $history = $this->recentHistory();
-        $historyText = $history === []
-            ? '(sin historial reciente)'
-            : implode("\n", array_map(
-                static fn (array $item, int $index): string => sprintf('%d) Usuario: %s | Asistente: %s', $index + 1, $item['question'], $item['answer']),
-                $history,
-                array_keys($history)
-            ));
-
-        $contextLines = array_map(
-            static fn (array $fragment): string => $fragment['content'],
-            $fragments
-        );
-
-        return "Pregunta del usuario:\n{$question}\n\n"
-            ."Historial reciente:\n{$historyText}\n\n"
-            ."Contexto recuperado de la base de conocimiento:\n".implode("\n\n", $contextLines)."\n\n"
-            ."Instrucciones:\n"
-            ."- Si la pregunta actual es una aclaración o seguimiento, interpretala usando el historial reciente.\n"
-            ."- Respondé solamente usando el contexto.\n"
-            ."- Si no hay información suficiente, decí que no tenés ese dato confirmado.\n"
-            ."- No inventes horarios, precios, distancias, disponibilidad, servicios ni condiciones.\n"
-            ."- No menciones \"según el fragmento\" ni \"según la base de conocimiento\".\n"
-            ."- Respondé de forma natural, como si estuvieras contestando por WhatsApp.\n"
-            ."- Si en el contexto aparece un enlace de reprogramación, incluilo cuando corresponda.\n"
-            ."- Máximo 120 palabras.";
-    }
-
-    private function buildClarificationPrompt(string $question): string
-    {
-        $history = $this->recentHistory();
-        $historyText = implode("\n", array_map(
-            static fn (array $item): string => "Usuario: {$item['question']}\nBot: {$item['answer']}",
-            $history
-        ));
-
-        return "Pregunta actual del usuario:\n{$question}\n\n"
-            ."Historial reciente:\n{$historyText}\n\n"
-            ."Instrucciones:\n"
-            ."- Si la pregunta actual es una aclaración o seguimiento, interpretala usando el historial reciente.\n"
-            ."- Reformulá la última explicación de forma más simple y concreta.\n"
-            ."- No repitas toda la respuesta anterior si no hace falta.\n"
-            ."- Si el tema es acceso, separá: Bariloche → Pampa Linda y Pampa Linda → Refugio.\n"
-            ."- Máximo 120 palabras.";
-    }
-
-    private function resolveTopK(?int $limit): int
-    {
-        $configuredTopK = (int) env('RAG_TOP_K', self::DEFAULT_TOP_K);
-        $defaultTopK = max(1, min(self::MAX_FRAGMENTS, $configuredTopK));
-
-        return $limit === null ? $defaultTopK : max(1, min(self::MAX_FRAGMENTS, $limit));
-    }
-
-    private function prepareFragments(array $fragments): array
-    {
-        $prepared = [];
-        $totalWords = 0;
-
-        foreach (array_slice($fragments, 0, self::MAX_FRAGMENTS) as $fragment) {
-            $trimmed = $this->truncateWords($fragment['content'], self::MAX_FRAGMENT_WORDS);
-            $words = $this->countWords($trimmed);
-
-            if ($words === 0 || $totalWords >= self::MAX_CONTEXT_WORDS) {
-                continue;
-            }
-
-            $allowed = min($words, self::MAX_CONTEXT_WORDS - $totalWords);
-            if ($allowed < $words) {
-                $trimmed = $this->truncateWords($trimmed, $allowed);
-                $words = $this->countWords($trimmed);
-            }
-
-            $fragment['content'] = $trimmed;
-            $prepared[] = $fragment;
-            $totalWords += $words;
-
-            if ($totalWords >= self::MAX_CONTEXT_WORDS) {
-                break;
-            }
-        }
-
-        return $prepared;
-    }
-
-    private function recentHistory(): array
-    {
-        $maxItems = max(self::MIN_HISTORY_ITEMS, self::MAX_HISTORY_ITEMS);
-
-        return array_slice($this->history, -$maxItems);
-    }
-
-    private function pushHistory(string $question, string $answer): void
-    {
-        $this->history[] = ['question' => $question, 'answer' => $answer];
-
-        if (count($this->history) > self::MAX_HISTORY_ITEMS) {
-            $this->history = array_slice($this->history, -self::MAX_HISTORY_ITEMS);
-        }
-    }
-
-    private function truncateWords(string $text, int $maxWords): string
-    {
-        $words = preg_split('/\s+/u', trim($text)) ?: [];
-
-        return trim(implode(' ', array_slice($words, 0, max(0, $maxWords))));
-    }
-
-    private function countWords(string $text): int
-    {
-        return count(preg_split('/\s+/u', trim($text)) ?: []);
-    }
-
-    private function sourcesFromFragments(array $fragments): array
-    {
-        return array_values(array_unique(array_map(
-            static fn (array $fragment): string => sprintf('%s#chunk-%d', $fragment['filename'], $fragment['chunk_index']),
-            $fragments
-        )));
+        return trim((string) preg_replace('/\s+/u', ' ', $text));
     }
 }
