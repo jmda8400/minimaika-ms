@@ -36,8 +36,8 @@ class BotSettingsTest extends TestCase
         $this->assertSame('Te respondemos pronto.', $settings['default_message']);
         $this->assertTrue($settings['respond_to_groups']);
         $this->assertTrue($settings['use_generative_ai']);
-        $this->assertFalse($settings['notify_on_fallback']);
-        $this->assertSame('', $settings['fallback_alert_phone']);
+        $this->assertTrue($settings['notify_on_fallback']);
+        $this->assertSame('+54 2944360712', $settings['fallback_alert_phone']);
     }
 
 
@@ -57,7 +57,7 @@ class BotSettingsTest extends TestCase
             ->assertSee('Respuesta de /whatsapp/status')
             ->assertSee('Olvidar sesión y pedir QR nuevo')
             ->assertSee('Volver a Administracion')
-            ->assertDontSee('Reenviar mensajes que el bot no pudo interpretar')
+            ->assertSee('Reenviar mensajes que el bot no pudo interpretar')
             ->assertSee('+54 2944360712')
             ->assertDontSee('Responder con IA generativa (Groq)')
             ->assertDontSee('Groq redacta la respuesta usando la base de conocimiento')
@@ -159,7 +159,7 @@ class BotSettingsTest extends TestCase
         ])->assertOk()->assertJson(['status' => 'sent']);
     }
 
-    public function test_webhook_sends_only_one_fallback_message(): void
+    public function test_webhook_notifies_configured_phone_when_the_bot_falls_back(): void
     {
         Storage::fake('local');
         Storage::disk('local')->put('bot-settings.json', json_encode([
@@ -180,6 +180,7 @@ class BotSettingsTest extends TestCase
 
         $this->mock(WhatsAppGatewayService::class, function ($mock): void {
             $mock->shouldReceive('sendText')->once()->with('5492944000000', 'No tengo esa información confirmada.');
+            $mock->shouldReceive('sendText')->once()->with('+54 2944360712', "No he podido descifrar la intencion del siguiente mensaje:\nConsulta inexistente");
         });
 
         $this->postJson(route('whatsapp.webhook'), [

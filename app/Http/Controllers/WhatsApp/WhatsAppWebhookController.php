@@ -48,6 +48,13 @@ class WhatsAppWebhookController extends Controller
             } else {
                 $botResponse = $this->ragBotService->answer($message['text'], null, $settings['use_generative_ai'], $message['phone']);
                 $answer = $botResponse['answer'];
+
+                if (($botResponse['source_type'] ?? null) === 'fallback' && $settings['notify_on_fallback'] && $settings['fallback_alert_phone'] !== '') {
+                    $this->whatsAppGatewayService->sendText(
+                        $settings['fallback_alert_phone'],
+                        "No he podido descifrar la intencion del siguiente mensaje:\n{$message['text']}",
+                    );
+                }
             }
 
             $this->whatsAppGatewayService->sendText($message['phone'], $answer);
