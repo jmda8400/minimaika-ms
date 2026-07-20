@@ -98,14 +98,13 @@
                 <div class="field">
                     <label class="checkbox">
                         <input type="checkbox" name="notify_on_fallback" value="1" @checked(old('notify_on_fallback', $settings['notify_on_fallback']))>
-                        <span><strong>Reenviar mensajes que el bot no pudo interpretar</strong><span class="hint">Cuando el bot no pueda identificar la intención o el significado de un mensaje, se enviará una alerta al número indicado.</span></span>
+                        <span><strong>Reenviar mensajes que el bot no pudo interpretar</strong></span>
                     </label>
                     @error('notify_on_fallback')<div class="error">{{ $message }}</div>@enderror
 
                     <div style="margin-top:16px">
                         <label for="fallback_alert_phone">Número que recibe las alertas</label>
                         <input id="fallback_alert_phone" name="fallback_alert_phone" type="text" value="{{ old('fallback_alert_phone', $settings['fallback_alert_phone']) }}" placeholder="+54 2944360712">
-                        <p class="hint">La alerta dirá: “No he podido descifrar la intencion del siguiente mensaje:” y luego incluirá el mensaje del cliente.</p>
                         @error('fallback_alert_phone')<div class="error">{{ $message }}</div>@enderror
                     </div>
                 </div>
