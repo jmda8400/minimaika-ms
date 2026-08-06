@@ -2,230 +2,137 @@
 
 namespace App\Services\Rag;
 
+use App\Services\Bot\ApprovedResponseCatalog;
 use App\Services\Bot\IntentDetectorService;
 use App\Services\Bot\PrewrittenResponseService;
 use App\Services\GroqChatService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class RagBotService
 {
-    private const INITIAL_CANDIDATES = 8;
-    private const MAX_FRAGMENTS = 3;
-    private const MAX_HISTORY_ITEMS = 5;
-    private const FALLBACK_MESSAGE = 'No pude entender tu consulta.';
-
-    /** @var array<string,array<int,array{question:string,answer:string}>> */
-    private array $historyByConversation = [];
+    private const MIN_SCORE = 0.34;
+    private const MIN_MARGIN = 0.12;
+    private const PENDING_SECONDS = 600;
 
     public function __construct(
         private readonly KnowledgeBaseService $knowledgeBaseService,
         private readonly IntentDetectorService $intentDetectorService,
         private readonly GroqChatService $groqChatService,
         private readonly PrewrittenResponseService $prewrittenResponseService,
+        private readonly ?ApprovedResponseCatalog $catalog = null,
     ) {
     }
 
-    /**
-     * Each invocation deliberately selects exactly one branch: local intent,
-     * confident RAG, or fallback. Conversation history is keyed by phone.
-     *
-     * @return array{answer:string,sources:array,fragments:array,source_type:string,prompt:string}
-     */
+    /** @return array{answer:string,sources:array,fragments:array,source_type:string,prompt:string} */
     public function answer(string $question, ?int $limit = null, bool|string $aiMode = 'semantic_classifier', ?string $conversationId = null): array
     {
-        $aiMode = $this->normalizeAiMode($aiMode);
+        $aiMode = is_bool($aiMode) ? ($aiMode ? 'semantic_classifier' : 'disabled') : ($aiMode === 'disabled' ? 'disabled' : 'semantic_classifier');
+        $catalog = $this->catalog ?? new ApprovedResponseCatalog();
+        $original = trim($question);
+        $normalized = $this->normalize($original);
         $conversationId ??= '__default__';
-        $question = trim($question);
-        Log::info('Pregunta recibida en bot.', ['question' => $question, 'conversation_id' => $conversationId]);
 
-        if (($clarification = $this->ambiguousResponse($question)) !== null) {
-            return $this->finish($conversationId, $question, $clarification, [], 'clarification');
+        if (($pending = Cache::get($this->pendingKey($conversationId))) === 'clarify.water_type') {
+            $followUps = ['en el sendero' => 'answer.trail_water', 'sendero' => 'answer.trail_water', 'potable' => 'answer.refuge_drinking_water', 'en el refugio' => 'answer.refuge_drinking_water', 'caliente' => 'answer.hot_water', 'mate' => 'answer.hot_water'];
+            if (isset($followUps[$normalized])) {
+                Cache::forget($this->pendingKey($conversationId));
+
+                return $this->finish($catalog, $followUps[$normalized], 'clarification_resolved', $original, $normalized, [], null, 'pending_clarification');
+            }
         }
 
-        $intent = $this->intentDetectorService->detect($question);
-        if ($intent !== null && $intent['response'] !== null && ! $intent['use_rag']) {
-            Log::info('Rama local seleccionada.', ['intent' => $intent['intent']]);
+        foreach ($catalog->all() as $record) {
+            if (! $record['active']) {
+                continue;
+            }
+            $phrases = array_merge([$record['canonical_question']], $record['aliases']);
+            if (in_array($normalized, array_map($this->normalize(...), $phrases), true)) {
+                if ($record['id'] === 'clarify.water_type') {
+                    Cache::put($this->pendingKey($conversationId), $record['id'], self::PENDING_SECONDS);
+                }
 
-            return $this->finish($conversationId, $question, $intent['response'], [], 'intent');
+                return $this->finish($catalog, $record['id'], str_starts_with($record['id'], 'clarify.') ? 'clarification' : 'exact', $original, $normalized, [], null, 'exact_match');
+            }
         }
 
-        $prewrittenKey = $this->prewrittenResponseService->detect($question);
-        if ($prewrittenKey !== null) {
-            Log::info('Rama FAQ local seleccionada.', ['response_key' => $prewrittenKey]);
+        $candidates = $this->hybridCandidates($normalized, $catalog, $limit ?? 8);
+        $best = (float) ($candidates[0]['score'] ?? 0);
+        $second = (float) ($candidates[1]['score'] ?? 0);
 
-            return $this->finish($conversationId, $question, (string) $this->prewrittenResponseService->get($prewrittenKey), [], 'prewritten');
+        if ($best < self::MIN_SCORE || ($best - $second) < self::MIN_MARGIN) {
+            $id = str_contains($normalized, 'agua') ? 'clarify.water_type' : 'fallback.unknown';
+            if ($id === 'clarify.water_type') {
+                Cache::put($this->pendingKey($conversationId), $id, self::PENDING_SECONDS);
+            }
+
+            return $this->finish($catalog, $id, str_starts_with($id, 'clarify.') ? 'clarification' : 'fallback', $original, $normalized, $candidates, null, $best < self::MIN_SCORE ? 'low_score' : 'insufficient_margin');
         }
 
-        if ($this->isContextualFollowUp($question) && ($history = $this->recentHistory($conversationId)) !== []) {
-            $previous = $history[array_key_last($history)]['answer'];
-            Log::info('Rama de contexto seleccionada.', ['conversation_id' => $conversationId, 'history_items' => count($history)]);
-
-            return $this->finish($conversationId, $question, $previous, [], 'history');
+        $routingCandidates = $candidates;
+        foreach (['clarify.water_type', 'fallback.unknown'] as $controlId) {
+            $control = $catalog->active($controlId);
+            $routingCandidates[] = ['id' => $control['id'], 'topic' => $control['topic'], 'description' => $control['canonical_question'], 'score' => 0.0];
+        }
+        $decision = $aiMode === 'disabled' ? ['action' => 'answer', 'answer_id' => $candidates[0]['id']] : $this->groqChatService->routeApprovedResponse($original, $routingCandidates);
+        $id = $this->decisionId($decision);
+        if ($id === null || $catalog->active($id) === null || ! in_array($id, array_column($routingCandidates, 'id'), true)) {
+            return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, $candidates, $decision, 'invalid_or_inactive_id');
         }
 
-        if ($aiMode === 'semantic_classifier' && ($classified = $this->classifyPrewrittenAnswer($question, $limit)) !== null) {
-            return $this->finish($conversationId, $question, $classified['answer'], [], 'groq_classifier', '', [[
-                'filename' => 'prewritten_responses',
-                'chunk_index' => 0,
-                'category' => 'prewritten',
-                'topic' => $classified['key'],
-                'location' => null,
-            ]]);
-        }
-
-        $candidates = $this->knowledgeBaseService->search($question, $this->resolveCandidateLimit($limit));
-        $fragments = $this->rerank($question, $candidates);
-        $bestScore = (float) ($fragments[0]['rerank_score'] ?? 0);
-        Log::info('Recuperación RAG evaluada.', [
-            'question' => $question,
-            'candidate_scores' => array_map(static fn (array $fragment): array => [
-                'file' => $fragment['filename'], 'chunk' => $fragment['chunk_index'], 'retrieval_score' => $fragment['score'], 'rerank_score' => $fragment['rerank_score'],
-            ], $fragments),
-            'selected_fragment' => $fragments[0]['content'] ?? null,
-            'best_score' => $bestScore,
-            'threshold' => $this->confidenceThreshold(),
-        ]);
-
-        if ($fragments === [] || $bestScore < $this->confidenceThreshold()) {
-            Log::info('Rama fallback seleccionada por confianza RAG insuficiente.', ['best_score' => $bestScore]);
-
-            return $this->finish($conversationId, $question, self::FALLBACK_MESSAGE, [], 'fallback');
-        }
-
-        $sources = array_map(static fn (array $fragment): array => [
-            'filename' => $fragment['filename'], 'chunk_index' => $fragment['chunk_index'], 'category' => $fragment['category'] ?? null,
-            'topic' => $fragment['topic'] ?? null, 'location' => $fragment['location'] ?? null,
-        ], $fragments);
-        $answer = $this->extractiveAnswer($fragments);
-        $prompt = $this->buildPrompt($question, $fragments, $this->recentHistory($conversationId));
-
-        if ($aiMode === 'generative' && ($generated = $this->groqChatService->generate('Respondés consultas del Refugio Agostino Rocca usando exclusivamente el contexto entregado.', $prompt)) !== null) {
-            $answer = $generated;
-        }
-
-        Log::info('Rama RAG seleccionada.', ['best_score' => $bestScore, 'fragment_count' => count($fragments)]);
-
-        return $this->finish($conversationId, $question, $answer, $fragments, 'rag', $prompt, $sources);
+        return $this->finish($catalog, $id, 'routed', $original, $normalized, $candidates, $decision, 'approved_id');
     }
 
-    /**
-     * @return array{key:string,answer:string}|null
-     */
-    private function classifyPrewrittenAnswer(string $question, ?int $limit): ?array
+    private function hybridCandidates(string $message, ApprovedResponseCatalog $catalog, int $limit): array
     {
-        $candidates = $this->prewrittenResponseService->candidatesForClassification($question, $this->resolveCandidateLimit($limit));
-        $classification = $this->groqChatService->classifyPrewrittenResponse($question, $candidates);
+        $tokens = array_values(array_filter(explode(' ', $message), static fn (string $token): bool => mb_strlen($token) > 2));
+        $candidates = [];
+        foreach ($catalog->all() as $record) {
+            if (! $record['active'] || ! str_starts_with($record['id'], 'answer.')) {
+                continue;
+            }
+            // Only the canonical question and aliases are indexed; approved answers never enter retrieval.
+            $indexedText = $this->normalize($record['canonical_question'].' '.implode(' ', $record['aliases']));
+            $lexical = count(array_filter($tokens, static fn (string $token): bool => str_contains($indexedText, $token))) / max(1, count($tokens));
+            similar_text($message, $indexedText, $semanticPercent);
+            $score = round(($lexical * .7) + (($semanticPercent / 100) * .3), 4);
+            $candidates[] = ['id' => $record['id'], 'topic' => $record['topic'], 'description' => $record['canonical_question'], 'score' => $score];
+        }
+        usort($candidates, static fn (array $a, array $b): int => $b['score'] <=> $a['score']);
 
-        if ($classification === null || $classification['selected_key'] === null || $classification['confidence'] < $this->classifierConfidenceThreshold()) {
-            Log::info('Clasificación Groq descartada por baja confianza o respuesta inválida.', [
-                'confidence' => $classification['confidence'] ?? null,
-                'threshold' => $this->classifierConfidenceThreshold(),
-            ]);
+        return array_slice($candidates, 0, max(2, $limit));
+    }
 
+    private function decisionId(?array $decision): ?string
+    {
+        if (! is_array($decision) || ! in_array($decision['action'] ?? null, ['answer', 'clarify', 'fallback'], true)) {
             return null;
         }
 
-        $answer = $this->prewrittenResponseService->get($classification['selected_key']);
-
-        return $answer === null ? null : ['key' => $classification['selected_key'], 'answer' => $answer];
-    }
-
-    private function normalizeAiMode(bool|string $aiMode): string
-    {
-        if (is_bool($aiMode)) {
-            return $aiMode ? 'generative' : 'disabled';
-        }
-
-        return in_array($aiMode, ['disabled', 'generative', 'semantic_classifier'], true) ? $aiMode : 'semantic_classifier';
-    }
-
-    private function ambiguousResponse(string $question): ?string
-    {
-        $normalized = $this->normalize($question);
-
-        return match ($normalized) {
-            'agua' => '¿Te referís al agua potable del refugio, al agua caliente para mate o al agua disponible durante el sendero?',
-            'mate' => '¿Querés saber si hay agua caliente para mate en el refugio o si podés llevar mate durante el sendero?',
-            'camino' => '¿Consultás por cómo llegar a Pampa Linda, los horarios del camino o la senda hasta el refugio?',
-            'precio', 'precios' => '¿Querés consultar el precio del pernocte, las comidas, la ducha u otro servicio?',
-            'reserva', 'reservar' => '¿Necesitás saber cómo reservar, modificar una reserva o consultar disponibilidad?',
-            default => null,
+        return match ($decision['action']) {
+            'answer' => is_string($decision['answer_id'] ?? null) ? $decision['answer_id'] : null,
+            'clarify' => is_string($decision['clarification_id'] ?? null) ? $decision['clarification_id'] : null,
+            'fallback' => is_string($decision['fallback_id'] ?? null) ? $decision['fallback_id'] : null,
         };
     }
 
-    private function isContextualFollowUp(string $question): bool
+    private function finish(ApprovedResponseCatalog $catalog, string $id, string $sourceType, string $original, string $normalized, array $candidates, ?array $groqDecision, string $reason): array
     {
-        $normalized = $this->normalize($question);
+        $record = $catalog->active($id) ?? $catalog->active('fallback.unknown');
+        Log::info('Decisión del router RAG controlado.', compact('original', 'normalized', 'candidates', 'groqDecision', 'id', 'sourceType', 'reason'));
 
-        return str_starts_with($normalized, 'y ') || str_starts_with($normalized, 'tambien ')
-            || in_array($normalized, ['y cuanto cuesta', 'tambien en invierno', 'y en invierno'], true);
+        return ['answer' => $record['approved_answer'], 'sources' => [['id' => $record['id'], 'topic' => $record['topic']]], 'fragments' => $candidates, 'source_type' => $sourceType, 'prompt' => ''];
     }
 
-    private function rerank(string $question, array $candidates): array
+    private function pendingKey(string $conversationId): string
     {
-        $tokens = array_values(array_filter(explode(' ', $this->normalize($question))));
-        foreach ($candidates as &$candidate) {
-            $content = $this->normalize($candidate['content']);
-            $hits = count(array_filter($tokens, static fn (string $token): bool => mb_strlen($token) > 1 && str_contains($content, $token)));
-            $directness = $hits / max(1, count($tokens));
-            $candidate['rerank_score'] = round(((float) $candidate['score'] * 0.65) + ($directness * 0.35), 4);
-        }
-        unset($candidate);
-        usort($candidates, static fn (array $a, array $b): int => $b['rerank_score'] <=> $a['rerank_score']);
-
-        return array_slice($candidates, 0, self::MAX_FRAGMENTS);
-    }
-
-    private function extractiveAnswer(array $fragments): string
-    {
-        $content = trim((string) ($fragments[0]['content'] ?? ''));
-        $sentences = preg_split('/(?<=[.!?])\s+/u', $content) ?: [];
-
-        return trim(implode(' ', array_slice($sentences, 0, 3))) ?: self::FALLBACK_MESSAGE;
-    }
-
-    private function buildPrompt(string $question, array $fragments, array $history): string
-    {
-        $context = implode("\n\n", array_map(static fn (array $fragment): string => $fragment['content'], $fragments));
-        $historyText = implode("\n", array_map(static fn (array $item): string => "Usuario: {$item['question']}\nBot: {$item['answer']}", $history));
-
-        return "Pregunta: {$question}\n\nHistorial aplicable:\n".($historyText ?: '(ninguno)')."\n\nContexto:\n{$context}\n\nRespondé breve, en español, solo con información del contexto.";
-    }
-
-    private function finish(string $conversationId, string $question, string $answer, array $fragments, string $sourceType, string $prompt = '', array $sources = []): array
-    {
-        $this->historyByConversation[$conversationId][] = ['question' => $question, 'answer' => $answer];
-        $this->historyByConversation[$conversationId] = array_slice($this->historyByConversation[$conversationId], -self::MAX_HISTORY_ITEMS);
-
-        return compact('answer', 'sources', 'fragments', 'sourceType', 'prompt') + ['source_type' => $sourceType];
-    }
-
-    private function recentHistory(string $conversationId): array
-    {
-        return $this->historyByConversation[$conversationId] ?? [];
-    }
-
-    private function resolveCandidateLimit(?int $limit): int
-    {
-        return $limit === null ? max(1, (int) env('RAG_INITIAL_TOP_K', self::INITIAL_CANDIDATES)) : max(1, $limit);
-    }
-
-    private function confidenceThreshold(): float
-    {
-        return (float) env('RAG_CONFIDENCE_THRESHOLD', 0.55);
-    }
-
-    private function classifierConfidenceThreshold(): float
-    {
-        return (float) env('GROQ_CLASSIFIER_CONFIDENCE_THRESHOLD', 0.75);
+        return 'bot:pending-clarification:'.sha1($conversationId);
     }
 
     private function normalize(string $text): string
     {
-        $text = mb_strtolower(trim($text));
-        $text = strtr($text, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u']);
-        $text = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? '';
+        $text = strtr(mb_strtolower(trim($text)), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u']);
 
-        return trim((string) preg_replace('/\s+/u', ' ', $text));
+        return trim((string) preg_replace('/\s+/u', ' ', preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? ''));
     }
 }

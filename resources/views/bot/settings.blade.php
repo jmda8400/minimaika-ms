@@ -82,19 +82,15 @@
 
                 <div class="field">
                     <label>Uso de Groq</label>
-                    <p class="hint">Elegí si Groq se usa para redactar, solo para clasificar o si queda deshabilitado.</p>
+                    <p class="hint">Groq nunca redacta mensajes: solo puede seleccionar identificadores de respuestas aprobadas.</p>
                     <div class="options">
                         <label class="option">
                             <input type="radio" name="ai_mode" value="semantic_classifier" @checked(old('ai_mode', $settings['ai_mode']) === 'semantic_classifier')>
-                            <span><strong>Groq como clasificador semántico</strong><br><span class="hint">Groq solo identifica cuál respuesta preescrita corresponde. La respuesta enviada sale textualmente de la base de conocimiento.</span></span>
+                            <span><strong>Groq como router controlado</strong><br><span class="hint">Groq selecciona un ID de respuesta, aclaración o fallback. El texto enviado sale textualmente del catálogo aprobado.</span></span>
                         </label>
                         <label class="option">
                             <input type="radio" name="ai_mode" value="disabled" @checked(old('ai_mode', $settings['ai_mode']) === 'disabled')>
-                            <span><strong>Sin Groq</strong><br><span class="hint">El bot usa solamente reglas locales, respuestas predefinidas y recuperación extractiva.</span></span>
-                        </label>
-                        <label class="option">
-                            <input type="radio" name="ai_mode" value="generative" @checked(old('ai_mode', $settings['ai_mode']) === 'generative')>
-                            <span><strong>Responder con IA generativa (Groq)</strong><br><span class="hint">Groq redacta la respuesta usando la base de conocimiento.</span></span>
+                            <span><strong>Sin Groq</strong><br><span class="hint">El router local selecciona exclusivamente respuestas del mismo catálogo aprobado.</span></span>
                         </label>
                     </div>
                     @error('ai_mode')<div class="error">{{ $message }}</div>@enderror
@@ -130,7 +126,7 @@
 
                 <div class="summary">
                     <strong>Estado actual</strong>
-                    Modo: {{ $settings['response_mode'] === 'default' ? 'mensaje por defecto' : 'bot' }} · Groq: {{ $settings['ai_mode'] === 'semantic_classifier' ? 'clasificador semántico' : ($settings['ai_mode'] === 'generative' ? 'generativo' : 'deshabilitado') }} · Respuestas: predefinidas, con encauzamiento automático cuando haga falta · Grupos: {{ $settings['respond_to_groups'] ? 'habilitados' : 'ignorados' }}
+                    Modo: {{ $settings['response_mode'] === 'default' ? 'mensaje por defecto' : 'bot' }} · Groq: {{ $settings['ai_mode'] === 'semantic_classifier' ? 'router controlado' : 'deshabilitado' }} · Respuestas: exclusivamente del catálogo aprobado · Grupos: {{ $settings['respond_to_groups'] ? 'habilitados' : 'ignorados' }}
                 </div>
 
                 <div class="actions">

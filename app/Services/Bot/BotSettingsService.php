@@ -22,7 +22,7 @@ class BotSettingsService
 
             if (is_array($storedSettings)) {
                 $settings = array_merge($settings, Arr::only($storedSettings, array_keys($settings)));
-                $settings['ai_mode'] = $storedSettings['ai_mode'] ?? (array_key_exists('use_generative_ai', $storedSettings) ? ((bool) $storedSettings['use_generative_ai'] ? 'generative' : 'disabled') : $settings['ai_mode']);
+                $settings['ai_mode'] = $storedSettings['ai_mode'] ?? 'semantic_classifier';
             }
         }
 
@@ -30,7 +30,7 @@ class BotSettingsService
             'response_mode' => $settings['response_mode'] === 'default' ? 'default' : 'bot',
             'default_message' => trim((string) $settings['default_message']),
             'respond_to_groups' => (bool) $settings['respond_to_groups'],
-            'use_generative_ai' => $settings['ai_mode'] === 'generative',
+            'use_generative_ai' => false,
             'ai_mode' => $this->normalizeAiMode((string) $settings['ai_mode']),
             'notify_on_fallback' => (bool) $settings['notify_on_fallback'],
             'fallback_alert_phone' => trim((string) $settings['fallback_alert_phone']),
@@ -48,7 +48,7 @@ class BotSettingsService
             'response_mode' => $settings['response_mode'] === 'default' ? 'default' : 'bot',
             'default_message' => trim($settings['default_message']),
             'respond_to_groups' => $settings['respond_to_groups'],
-            'use_generative_ai' => $this->normalizeAiMode((string) $settings['ai_mode']) === 'generative',
+            'use_generative_ai' => false,
             'ai_mode' => $this->normalizeAiMode((string) $settings['ai_mode']),
             'notify_on_fallback' => $settings['notify_on_fallback'],
             'fallback_alert_phone' => trim($settings['fallback_alert_phone']),
@@ -57,7 +57,7 @@ class BotSettingsService
 
     private function normalizeAiMode(string $mode): string
     {
-        return in_array($mode, ['disabled', 'generative', 'semantic_classifier'], true) ? $mode : 'semantic_classifier';
+        return in_array($mode, ['disabled', 'semantic_classifier'], true) ? $mode : 'semantic_classifier';
     }
 
     /**
