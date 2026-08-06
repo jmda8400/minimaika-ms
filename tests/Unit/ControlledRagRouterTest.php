@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Services\Bot\ApprovedResponseCatalog;
 use App\Services\Bot\IntentDetectorService;
 use App\Services\Bot\PrewrittenResponseService;
 use App\Services\GroqChatService;
@@ -11,6 +12,18 @@ use Tests\TestCase;
 
 class ControlledRagRouterTest extends TestCase
 {
+    public function test_every_catalog_record_preserves_the_required_search_schema(): void
+    {
+        $records = (new ApprovedResponseCatalog())->all();
+
+        foreach ($records as $id => $record) {
+            $this->assertArrayHasKey('aliases', $record, "Catalog record {$id} has no aliases field.");
+            $this->assertIsArray($record['aliases'], "Catalog record {$id} aliases must be an array.");
+        }
+
+        $this->assertSame([], $records['fallback.unknown']['aliases']);
+    }
+
     /** @dataProvider approvedQueries */
     public function test_required_queries_return_only_approved_catalog_entries(string $query, string $expectedTopic): void
     {

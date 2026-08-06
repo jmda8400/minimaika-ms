@@ -45,10 +45,18 @@ class ApprovedResponseCatalog
 
     private function record(string $id, string $topic, string $question, array $aliases, string $answer, bool $active = true, array $metadata = []): array
     {
-        return array_filter([
+        $record = [
             'id' => $id, 'topic' => $topic, 'canonical_question' => $question,
             'aliases' => $aliases, 'approved_answer' => $answer, 'active' => $active,
-            'metadata' => $metadata,
-        ], static fn (mixed $value): bool => $value !== []);
+        ];
+
+        // Required schema fields must remain present even when their value is an
+        // empty array. In particular, fallback.unknown intentionally has no
+        // aliases and is still indexed by the router.
+        if ($metadata !== []) {
+            $record['metadata'] = $metadata;
+        }
+
+        return $record;
     }
 }
