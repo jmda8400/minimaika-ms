@@ -10,7 +10,7 @@ class GroqChatService
 {
     /**
      * @param array<int,array{id:string,topic:string,description:string,score:float}> $candidates
-     * @return array{action:string,answer_id?:string,clarification_id?:string,fallback_id?:string}|null
+     * @return array{action:string,answer_id?:string,clarification_id?:string,fallback_id?:string,confidence:float,_raw_response:string}|null
      */
     public function routeApprovedResponse(string $question, array $candidates): ?array
     {
@@ -20,24 +20,27 @@ class GroqChatService
 
         $allowed = array_column($candidates, 'id');
         $content = $this->generate(
-            'Sos un router. Nunca redactes una respuesta al usuario. Elegí exclusivamente un identificador provisto y devolvé JSON.',
+            'Sos un clasificador de intenciones. Nunca redactes una respuesta al usuario. Elegí exclusivamente un identificador provisto. Priorizá la intención completa sobre coincidencias de palabras aisladas. Devolvé solamente el JSON solicitado y una confianza entre 0 y 1.',
             json_encode(['message' => $question, 'candidates' => array_map(static fn (array $candidate): array => [
                 'id' => $candidate['id'], 'topic' => $candidate['topic'], 'description' => $candidate['description'],
-            ], $candidates), 'schema' => ['action' => 'answer|clarify|fallback', 'answer_id' => 'id si action=answer', 'clarification_id' => 'id si action=clarify', 'fallback_id' => 'id si action=fallback']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
-            ['temperature' => 0, 'max_tokens' => 80, 'top_p' => 1, 'response_format' => ['type' => 'json_object']],
+            ], $candidates), 'schema' => ['action' => 'answer|clarify|fallback', 'answer_id' => 'id si action=answer', 'clarification_id' => 'id si action=clarify', 'fallback_id' => 'id si action=fallback', 'confidence' => 'numero entre 0 y 1']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
+            ['temperature' => 0, 'max_tokens' => 100, 'top_p' => 1, 'response_format' => ['type' => 'json_object']],
         );
         $decision = json_decode((string) $content, true);
-        if (! is_array($decision) || ! in_array($decision['action'] ?? null, ['answer', 'clarify', 'fallback'], true)) {
-            Log::warning('Groq devolvió una decisión de router inválida.');
+        if (! is_array($decision) || ! in_array($decision['action'] ?? null, ['answer', 'clarify', 'fallback'], true) || ! is_numeric($decision['confidence'] ?? null)) {
+            Log::warning('Groq devolvió una decisión de router inválida.', ['groq_raw_response' => $content]);
 
             return null;
         }
         $field = ['answer' => 'answer_id', 'clarify' => 'clarification_id', 'fallback' => 'fallback_id'][$decision['action']];
         if (! is_string($decision[$field] ?? null) || ! in_array($decision[$field], $allowed, true)) {
-            Log::warning('Groq seleccionó un ID no permitido.', ['decision' => $decision]);
+            Log::warning('Groq seleccionó un ID no permitido.', ['decision' => $decision, 'groq_raw_response' => $content]);
 
             return null;
         }
+
+        $decision['confidence'] = max(0.0, min(1.0, (float) $decision['confidence']));
+        $decision['_raw_response'] = (string) $content;
 
         return $decision;
     }

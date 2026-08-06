@@ -23,12 +23,12 @@ class PrewrittenResponseService
             'horario_camino_pampa_linda' => [
                 'title' => 'HORARIO DEL CAMINO A PAMPA LINDA',
                 'response' => "Horario del camino a Pampa Linda:\nSubida únicamente: de 10:30 a 14 hs desde Los Rápidos.\nBajada únicamente: 16 a 18 hs.\nDoble mano: de 19:30 a 9 hs.\nProhibido subir: entre las 14 y las 19:30 hs.",
-                'keywords' => ['horario camino', 'horario del camino', 'camino pampa linda', 'los rapidos', 'los rápidos', 'subida camino', 'bajada camino', 'doble mano'],
+                'keywords' => ['horario camino', 'horario del camino', 'camino pampa linda', 'camino a pampa linda', 'como es el camino a pampa linda', 'los rapidos', 'los rápidos', 'subida camino', 'bajada camino', 'doble mano'],
             ],
             'reserva_inicio_temporada' => [
                 'title' => 'RESERVA INICIO DE TEMPORADA',
                 'response' => 'Del 1 al 15 de noviembre reservamos tu lugar sin pago anticipado debido a que las condiciones de acceso pueden ser aún complicadas por la cantidad de nieve y estado del sendero, y esto puede demorar la apertura.',
-                'keywords' => ['inicio temporada', 'noviembre', '1 al 15 de noviembre', 'sin pago anticipado', 'apertura temporada'],
+                'keywords' => ['inicio temporada', 'noviembre', 'reservar en noviembre', 'reserva noviembre', '1 al 15 de noviembre', 'sin pago anticipado', 'apertura temporada'],
             ],
             'reserva_final_temporada' => [
                 'title' => 'RESERVA FINAL DE TEMPORADA',
@@ -38,7 +38,7 @@ class PrewrittenResponseService
             'estado_sendero' => [
                 'title' => 'ESTADO DEL SENDERO',
                 'response' => 'En este link vas a encontrar la última actualización acerca del estado del sendero: https://www.refugioagostinorocca.com/#estado-del-sendero',
-                'keywords' => ['estado sendero', 'sendero abierto', 'sendero cerrado', 'estado del camino', 'estado senda'],
+                'keywords' => ['estado sendero', 'estado del sendero al rocca', 'sendero al rocca', 'que tal el sendero', 'sendero abierto', 'sendero cerrado', 'estado del camino', 'que tal el estado del camino', 'estado senda'],
             ],
             'guias' => [
                 'title' => 'GUIAS',
