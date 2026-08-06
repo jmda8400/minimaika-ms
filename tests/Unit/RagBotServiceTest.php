@@ -44,10 +44,60 @@ class RagBotServiceTest extends TestCase
             new PrewrittenResponseService(),
         );
 
-        $response = $service->answer('¿Dónde queda el refugio?', null, true);
+        $response = $service->answer('¿Dónde queda el refugio?', null, 'generative');
 
         $this->assertSame('rag', $response['source_type']);
         $this->assertSame('Está en Pampa Linda, en el Cerro Tronador.', $response['answer']);
+    }
+
+
+    public function test_semantic_classifier_returns_exact_prewritten_answer_without_using_groq_text(): void
+    {
+        $knowledgeBase = Mockery::mock(KnowledgeBaseService::class);
+        $knowledgeBase->shouldNotReceive('search');
+
+        $groq = Mockery::mock(GroqChatService::class);
+        $groq->shouldNotReceive('generate');
+        $groq->shouldReceive('classifyPrewrittenResponse')
+            ->once()
+            ->withArgs(fn (string $question, array $candidates): bool => $question === 'Necesito pronóstico meteorológico' && array_key_exists('clima', $candidates))
+            ->andReturn(['selected_key' => 'clima', 'confidence' => 0.91, 'reason' => 'Habla del pronóstico.']);
+
+        $prewritten = new PrewrittenResponseService();
+        $service = new RagBotService(
+            $knowledgeBase,
+            new IntentDetectorService(),
+            $groq,
+            $prewritten,
+        );
+
+        $response = $service->answer('Necesito pronóstico meteorológico', null, 'semantic_classifier');
+
+        $this->assertSame('groq_classifier', $response['source_type']);
+        $this->assertSame($prewritten->get('clima'), $response['answer']);
+        $this->assertNotSame('Habla del pronóstico.', $response['answer']);
+    }
+
+    public function test_semantic_classifier_falls_back_when_confidence_is_low(): void
+    {
+        $knowledgeBase = Mockery::mock(KnowledgeBaseService::class);
+        $knowledgeBase->shouldReceive('search')->once()->andReturn([]);
+
+        $groq = Mockery::mock(GroqChatService::class);
+        $groq->shouldReceive('classifyPrewrittenResponse')->once()->andReturn(['selected_key' => 'clima', 'confidence' => 0.2, 'reason' => null]);
+        $groq->shouldNotReceive('generate');
+
+        $service = new RagBotService(
+            $knowledgeBase,
+            new IntentDetectorService(),
+            $groq,
+            new PrewrittenResponseService(),
+        );
+
+        $response = $service->answer('Necesito pronóstico meteorológico', null, 'semantic_classifier');
+
+        $this->assertSame('fallback', $response['source_type']);
+        $this->assertSame('No pude entender tu consulta.', $response['answer']);
     }
 
     public function test_tac_question_uses_prewritten_gluten_answer_without_groq(): void
@@ -57,6 +107,7 @@ class RagBotServiceTest extends TestCase
 
         $groq = Mockery::mock(GroqChatService::class);
         $groq->shouldNotReceive('generate');
+        $groq->shouldNotReceive('classifyPrewrittenResponse');
 
         $service = new RagBotService(
             $knowledgeBase,

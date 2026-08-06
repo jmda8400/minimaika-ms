@@ -248,6 +248,26 @@ class PrewrittenResponseService
         ];
     }
 
+    /**
+     * @return array<string, array{title:string,response:string,keywords:array<int,string>,score:float}>
+     */
+    public function candidatesForClassification(string $message, int $limit = 12): array
+    {
+        $tokens = array_values(array_filter(explode(' ', $this->normalize($message))));
+        $candidates = [];
+
+        foreach ($this->all() as $key => $item) {
+            $haystack = $this->normalize($item['title'].' '.implode(' ', $item['keywords']).' '.$item['response']);
+            $hits = count(array_filter($tokens, static fn (string $token): bool => mb_strlen($token) > 2 && str_contains($haystack, $token)));
+            $score = $tokens === [] ? 0.0 : $hits / max(1, count($tokens));
+            $candidates[$key] = $item + ['score' => round($score, 4)];
+        }
+
+        uasort($candidates, static fn (array $a, array $b): int => $b['score'] <=> $a['score']);
+
+        return array_slice($candidates, 0, max(1, $limit), true);
+    }
+
     public function get(string $key): ?string
     {
         $responses = $this->all();

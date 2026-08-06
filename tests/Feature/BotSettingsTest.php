@@ -25,6 +25,7 @@ class BotSettingsTest extends TestCase
             'response_mode' => 'default',
             'default_message' => 'Te respondemos pronto.',
             'respond_to_groups' => '1',
+            'ai_mode' => 'semantic_classifier',
             'notify_on_fallback' => '1',
             'fallback_alert_phone' => '+54 2944360712',
         ])->assertRedirect(route('bot.settings.edit'));
@@ -35,7 +36,8 @@ class BotSettingsTest extends TestCase
         $this->assertSame('default', $settings['response_mode']);
         $this->assertSame('Te respondemos pronto.', $settings['default_message']);
         $this->assertTrue($settings['respond_to_groups']);
-        $this->assertTrue($settings['use_generative_ai']);
+        $this->assertFalse($settings['use_generative_ai']);
+        $this->assertSame('semantic_classifier', $settings['ai_mode']);
         $this->assertTrue($settings['notify_on_fallback']);
         $this->assertSame('+54 2944360712', $settings['fallback_alert_phone']);
     }
@@ -59,8 +61,10 @@ class BotSettingsTest extends TestCase
             ->assertSee('Volver a Administracion')
             ->assertSee('Reenviar mensajes que el bot no pudo interpretar')
             ->assertSee('+54 2944360712')
-            ->assertDontSee('Responder con IA generativa (Groq)')
-            ->assertDontSee('Groq redacta la respuesta usando la base de conocimiento')
+            ->assertSee('Groq como clasificador semántico')
+            ->assertSee('La respuesta enviada sale textualmente de la base de conocimiento')
+            ->assertSee('Responder con IA generativa (Groq)')
+            ->assertSee('Groq redacta la respuesta usando la base de conocimiento')
             ->assertSee('Respuestas: predefinidas, con encauzamiento automático cuando haga falta');
     }
 
@@ -111,6 +115,7 @@ class BotSettingsTest extends TestCase
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
             'use_generative_ai' => false,
+            'ai_mode' => 'disabled',
             'notify_on_fallback' => true,
             'fallback_alert_phone' => '+54 2944360712',
         ]));
@@ -131,7 +136,7 @@ class BotSettingsTest extends TestCase
         ])->assertOk()->assertJson(['status' => 'sent']);
     }
 
-    public function test_webhook_passes_generative_ai_setting_to_bot(): void
+    public function test_webhook_passes_ai_mode_setting_to_bot(): void
     {
         Storage::fake('local');
         Storage::disk('local')->put('bot-settings.json', json_encode([
@@ -139,12 +144,13 @@ class BotSettingsTest extends TestCase
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
             'use_generative_ai' => false,
+            'ai_mode' => 'semantic_classifier',
             'notify_on_fallback' => true,
             'fallback_alert_phone' => '+54 2944360712',
         ]));
 
         $this->mock(RagBotService::class, function ($mock): void {
-            $mock->shouldReceive('answer')->once()->with('Hola', null, false, '5492944000000')->andReturn(['answer' => 'Respuesta sin IA generativa.']);
+            $mock->shouldReceive('answer')->once()->with('Hola', null, 'semantic_classifier', '5492944000000')->andReturn(['answer' => 'Respuesta sin IA generativa.']);
         });
 
         $this->mock(WhatsAppGatewayService::class, function ($mock): void {
@@ -167,12 +173,13 @@ class BotSettingsTest extends TestCase
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
             'use_generative_ai' => false,
+            'ai_mode' => 'disabled',
             'notify_on_fallback' => true,
             'fallback_alert_phone' => '+54 2944360712',
         ]));
 
         $this->mock(RagBotService::class, function ($mock): void {
-            $mock->shouldReceive('answer')->once()->with('Consulta inexistente', null, false, '5492944000000')->andReturn([
+            $mock->shouldReceive('answer')->once()->with('Consulta inexistente', null, 'disabled', '5492944000000')->andReturn([
                 'answer' => 'No tengo esa información confirmada.',
                 'source_type' => 'fallback',
             ]);
@@ -194,7 +201,7 @@ class BotSettingsTest extends TestCase
     public function test_webhook_ignores_a_duplicate_message_id_without_calling_the_bot_or_gateway(): void
     {
         Storage::fake('local');
-        Storage::disk('local')->put('bot-settings.json', json_encode(['response_mode' => 'bot', 'respond_to_groups' => false, 'use_generative_ai' => false]));
+        Storage::disk('local')->put('bot-settings.json', json_encode(['response_mode' => 'bot', 'respond_to_groups' => false, 'use_generative_ai' => false, 'ai_mode' => 'disabled']));
         $payload = ['instanceId' => 'refugio', 'data' => ['key' => ['id' => 'ABC-123', 'fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net'], 'message' => ['conversation' => 'Hola']]];
 
         $this->mock(RagBotService::class, function ($mock): void {
@@ -237,6 +244,7 @@ class BotSettingsTest extends TestCase
             'default_message' => 'Mensaje fijo.',
             'respond_to_groups' => false,
             'use_generative_ai' => false,
+            'ai_mode' => 'disabled',
             'notify_on_fallback' => false,
             'fallback_alert_phone' => '+54 2944360712',
         ]));

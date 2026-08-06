@@ -32,6 +32,7 @@ class BotSettingsController extends Controller
             'response_mode' => ['required', 'in:bot,default'],
             'default_message' => ['required', 'string', 'max:1000'],
             'respond_to_groups' => ['nullable', 'boolean'],
+            'ai_mode' => ['required', 'in:disabled,generative,semantic_classifier'],
             'notify_on_fallback' => ['nullable', 'boolean'],
             'fallback_alert_phone' => ['nullable', 'string', 'max:30', 'required_if:notify_on_fallback,1'],
         ]);
@@ -40,7 +41,8 @@ class BotSettingsController extends Controller
             'response_mode' => $validated['response_mode'],
             'default_message' => $validated['default_message'],
             'respond_to_groups' => $request->boolean('respond_to_groups'),
-            'use_generative_ai' => true,
+            'use_generative_ai' => $validated['ai_mode'] === 'generative',
+            'ai_mode' => $validated['ai_mode'],
             'notify_on_fallback' => $request->boolean('notify_on_fallback'),
             'fallback_alert_phone' => $validated['fallback_alert_phone'] ?? '',
         ]);
