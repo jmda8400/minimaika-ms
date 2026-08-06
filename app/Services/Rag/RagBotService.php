@@ -76,18 +76,29 @@ class RagBotService
             $control = $catalog->active($controlId);
             $routingCandidates[] = ['id' => $control['id'], 'topic' => $control['topic'], 'description' => $control['canonical_question'], 'score' => 0.0];
         }
-        $decision = $aiMode === 'disabled' ? ['action' => 'answer', 'answer_id' => $candidates[0]['id'], 'confidence' => 1.0, '_raw_response' => 'classifier_disabled'] : $this->groqChatService->routeApprovedResponse($original, $routingCandidates);
-        $id = $this->decisionId($decision);
-        if ($id === null || $catalog->active($id) === null || ! in_array($id, array_column($routingCandidates, 'id'), true)) {
+        $decision = $aiMode === 'disabled' ? ['intents' => [['intent_id' => $candidates[0]['id'], 'confidence' => 1.0]], 'entities' => [], '_raw_response' => 'classifier_disabled'] : $this->groqChatService->routeApprovedResponse($original, $routingCandidates);
+        $intents = $decision['intents'] ?? null;
+        if (! is_array($intents) || $intents === [] || count($intents) > 2) {
             return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, $candidates, $routingCandidates, $decision, 'invalid_or_inactive_id');
         }
 
-        $confidence = (float) ($decision['confidence'] ?? 0);
-        if ($confidence < (float) config('services.rag.classifier_confidence_threshold', 0.55)) {
-            return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, $candidates, $routingCandidates, $decision, 'low_classifier_confidence');
+        $ids = [];
+        foreach ($intents as $intent) {
+            $id = $intent['intent_id'] ?? null;
+            if (! is_string($id) || isset($ids[$id]) || $catalog->active($id) === null || ! in_array($id, array_column($routingCandidates, 'id'), true)) {
+                return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, $candidates, $routingCandidates, $decision, 'invalid_or_inactive_id');
+            }
+            if ((float) ($intent['confidence'] ?? 0) < (float) config('services.rag.classifier_confidence_threshold', 0.55)) {
+                return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, $candidates, $routingCandidates, $decision, 'low_classifier_confidence');
+            }
+            $ids[$id] = true;
         }
 
-        return $this->finish($catalog, $id, 'routed', $original, $normalized, $candidates, $routingCandidates, $decision, 'approved_id');
+        if (count($ids) > 1 && isset($ids['fallback.unknown'])) {
+            return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, $candidates, $routingCandidates, $decision, 'fallback_mixed_with_answer');
+        }
+
+        return $this->finishMany($catalog, array_keys($ids), $original, $normalized, $candidates, $routingCandidates, $decision);
     }
 
     private function hybridCandidates(string $message, ApprovedResponseCatalog $catalog, int $limit): array
@@ -124,19 +135,6 @@ class RagBotService
         return array_slice($candidates, 0, max(2, $limit));
     }
 
-    private function decisionId(?array $decision): ?string
-    {
-        if (! is_array($decision) || ! in_array($decision['action'] ?? null, ['answer', 'clarify', 'fallback'], true)) {
-            return null;
-        }
-
-        return match ($decision['action']) {
-            'answer' => is_string($decision['answer_id'] ?? null) ? $decision['answer_id'] : null,
-            'clarify' => is_string($decision['clarification_id'] ?? null) ? $decision['clarification_id'] : null,
-            'fallback' => is_string($decision['fallback_id'] ?? null) ? $decision['fallback_id'] : null,
-        };
-    }
-
     private function finish(ApprovedResponseCatalog $catalog, string $id, string $sourceType, string $original, string $normalized, array $candidates, array $sentCandidates, ?array $groqDecision, string $reason): array
     {
         $record = $catalog->active($id) ?? $catalog->active('fallback.unknown');
@@ -149,11 +147,38 @@ class RagBotService
             'candidates_sent_to_groq' => array_column($sentCandidates, 'id'),
             'groq_raw_response' => $groqDecision['_raw_response'] ?? null,
             'selected_intent_id' => $record['id'],
-            'classifier_confidence' => isset($groqDecision['confidence']) ? (float) $groqDecision['confidence'] : null,
+            'classifier_confidence' => $groqDecision['intents'][0]['confidence'] ?? null,
+            'extracted_entities' => $groqDecision['entities'] ?? [],
             'fallback_reason' => $reason,
         ]);
 
         return ['answer' => $record['approved_answer'], 'sources' => [['id' => $record['id'], 'topic' => $record['topic']]], 'fragments' => $candidates, 'source_type' => $sourceType, 'prompt' => ''];
+    }
+
+    private function finishMany(ApprovedResponseCatalog $catalog, array $ids, string $original, string $normalized, array $candidates, array $sentCandidates, array $decision): array
+    {
+        if (count($ids) === 1) {
+            $id = $ids[0];
+
+            return $this->finish($catalog, $id, str_starts_with($id, 'clarify.') ? 'clarification' : ($id === 'fallback.unknown' ? 'fallback' : 'routed'), $original, $normalized, $candidates, $sentCandidates, $decision, 'approved_id');
+        }
+
+        $records = array_map(static fn (string $id): array => $catalog->active($id), $ids);
+        Log::info('controlled_rag_classification', [
+            'user_message' => $original, 'normalized_message' => $normalized,
+            'retrieved_candidate_ids' => array_column($candidates, 'id'),
+            'candidates_sent_to_groq' => array_column($sentCandidates, 'id'),
+            'groq_raw_response' => $decision['_raw_response'] ?? null,
+            'selected_intent_ids' => $ids,
+            'classifier_confidences' => array_column($decision['intents'], 'confidence'),
+            'extracted_entities' => $decision['entities'] ?? [], 'fallback_reason' => 'approved_ids',
+        ]);
+
+        return [
+            'answer' => implode("\n\n", array_column($records, 'approved_answer')),
+            'sources' => array_map(static fn (array $record): array => ['id' => $record['id'], 'topic' => $record['topic']], $records),
+            'fragments' => $candidates, 'source_type' => 'routed', 'prompt' => '',
+        ];
     }
 
     /** @return array<int, string> */

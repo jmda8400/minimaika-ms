@@ -64,6 +64,37 @@ class ControlledRagRouterTest extends TestCase
         $this->assertNotSame('clarification_resolved', $otherPhone['source_type']);
     }
 
+    public function test_two_classified_intents_return_the_two_exact_approved_answers(): void
+    {
+        $groq = $this->createMock(GroqChatService::class);
+        $groq->method('routeApprovedResponse')->willReturn([
+            'intents' => [
+                ['intent_id' => 'answer.formas_pago_refugio', 'confidence' => .95],
+                ['intent_id' => 'answer.cargar_celular', 'confidence' => .91],
+            ],
+            'entities' => ['dates' => [], 'quantities' => [], 'codes' => []],
+            '_raw_response' => '{}',
+        ]);
+        $router = new RagBotService(
+            $this->createMock(KnowledgeBaseService::class),
+            new IntentDetectorService(),
+            $groq,
+            new PrewrittenResponseService(),
+        );
+
+        $result = $router->answer('¿Puedo abonar con tarjeta y cargar mi teléfono?', null, 'semantic_classifier', 'phone-a');
+        $catalog = new ApprovedResponseCatalog();
+
+        $this->assertSame([
+            'answer.formas_pago_refugio',
+            'answer.cargar_celular',
+        ], array_column($result['sources'], 'id'));
+        $this->assertSame(
+            $catalog->active('answer.formas_pago_refugio')['approved_answer']."\n\n".$catalog->active('answer.cargar_celular')['approved_answer'],
+            $result['answer'],
+        );
+    }
+
     private function router(): RagBotService
     {
         return new RagBotService(

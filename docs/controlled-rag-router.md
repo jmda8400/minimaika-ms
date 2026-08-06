@@ -15,11 +15,17 @@ No se exige una diferencia mínima entre el primero y el segundo: Groq recibe am
 para resolver intenciones cercanas.
 
 Groq recibe los IDs, temas y preguntas canónicas recuperadas, además de los controles
-de aclaración y fallback. Debe devolver JSON con `action`, el campo de ID correspondiente
-y `confidence`. El ID debe pertenecer al conjunto enviado, estar activo y superar
-`RAG_CONFIDENCE_THRESHOLD`. Cualquier JSON inválido, ID ajeno/inactivo o confianza
-baja termina en `fallback.unknown`. La respuesta al usuario siempre se obtiene del
-catálogo a partir del ID validado; Groq nunca redacta la respuesta final.
+de aclaración y fallback. Debe devolver JSON con `intents` (entre una y dos entradas),
+un `intent_id` y `confidence` por entrada, y las entidades literales detectadas en
+`entities` (`dates`, `quantities` y `codes`). Cada ID debe pertenecer al conjunto
+enviado, estar activo y superar `RAG_CONFIDENCE_THRESHOLD`. Cualquier JSON inválido,
+ID duplicado, ajeno/inactivo o confianza baja termina en `fallback.unknown`.
+
+Laravel resuelve cada ID validado contra el catálogo. Si hay dos intenciones, concatena
+las dos respuestas aprobadas, sin alterar su redacción. Groq nunca recibe el texto de
+las respuestas, nunca redacta la respuesta final y no puede completar una entidad o
+condición que el cliente no haya escrito. Si ninguna intención corresponde, debe elegir
+el ID controlado `fallback.unknown`.
 
 ## Configuración
 
