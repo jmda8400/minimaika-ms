@@ -2,8 +2,30 @@
 
 namespace App\Services\Bot;
 
+use Illuminate\Support\Facades\Cache;
+
 class ApprovedResponseCatalog
 {
+    private const CACHE_KEY = 'minimaika:intent-catalog:v2';
+    private const ALIAS_CACHE_KEY = 'minimaika:intent-aliases:v2';
+
+    /** Old IDs remain valid references, but are never sent to the classifier. */
+    private const CANONICAL_IDS = [
+        'answer.trail_water' => 'answer.agua_sendero_subida',
+        'answer.hot_water' => 'answer.agua_caliente',
+        'answer.gluten_free' => 'answer.comida_sin_gluten',
+        'answer.meal_reservation' => 'answer.reservar_comidas',
+    ];
+
+    private const DESCRIPTIONS = [
+        'answer.greeting' => 'Saludo o inicio cordial de conversación.',
+        'answer.agua_sendero_subida' => 'Disponibilidad y lugares para recargar agua durante la subida al refugio.',
+        'answer.agua_caliente' => 'Disponibilidad de agua caliente para mate o infusiones.',
+        'answer.comida_sin_gluten' => 'Opciones de comida sin gluten y riesgo de contaminación cruzada.',
+        'answer.reservar_comidas' => 'Necesidad de reservar comidas antes de llegar al refugio.',
+        'answer.reprogramar_reserva' => 'Cambiar la fecha de una reserva existente.',
+        'answer.tarifas_precios' => 'Precio del alojamiento, comidas o servicios publicado por el refugio.',
+    ];
     /**
      * This is the only source of user-visible bot copy. Every searchable record is
      * one approved response; no scraped pages or multi-FAQ fragments are included.
@@ -48,23 +70,84 @@ class ApprovedResponseCatalog
         return ($record['active'] ?? false) ? $record : null;
     }
 
-    /** @return array<int,array{id:string,name:string,description:string,examples:array<int,string>}> */
+    /** @return array<int,array{id:string,description:string,examples:array<int,string>}> */
     public function classifierEntries(?int $limit = null): array
     {
-        $entries = [];
-        foreach ($this->all() as $record) {
-            if (! $record['is_active'] || $record['answer'] === '' || $record['id'] === 'fallback.unknown') {
-                continue;
+        $entries = Cache::rememberForever(self::CACHE_KEY, function (): array {
+            $entries = [];
+            foreach ($this->all() as $record) {
+                if (! $record['is_active'] || $record['answer'] === '' || $record['id'] === 'fallback.unknown' || isset(self::CANONICAL_IDS[$record['id']])) {
+                    continue;
+                }
+                $entries[] = [
+                    'id' => (string) $record['id'],
+                    'description' => self::DESCRIPTIONS[$record['id']] ?? $this->briefDescription($record),
+                    'examples' => isset(self::DESCRIPTIONS[$record['id']]) ? array_values(array_slice(array_unique(array_filter(array_map(
+                        static fn (string $example): string => mb_substr(trim($example), 0, 32),
+                        $record['example_questions'],
+                    ))), 0, 1)) : [],
+                ];
             }
-            $entries[] = [
-                'id' => (string) $record['id'],
-                'name' => $record['name'],
-                'description' => $record['description'],
-                'examples' => $record['example_questions'],
-            ];
-        }
+
+            return $entries;
+        });
 
         return $limit === null || $limit <= 0 ? $entries : array_slice($entries, 0, $limit);
+    }
+
+    public function canonicalId(string $id): string
+    {
+        return self::CANONICAL_IDS[$id] ?? $id;
+    }
+
+    /** @return array<string,string> */
+    public function canonicalMappings(): array
+    {
+        return self::CANONICAL_IDS;
+    }
+
+    public function clearClassifierCache(): void
+    {
+        Cache::forget(self::CACHE_KEY);
+        Cache::forget(self::ALIAS_CACHE_KEY);
+    }
+
+    /** @return array<int,string> Canonical IDs whose alias/example equals the normalized message. */
+    public function exactMatches(string $normalized): array
+    {
+        $index = Cache::rememberForever(self::ALIAS_CACHE_KEY, function (): array {
+            $index = [];
+            foreach ($this->all() as $record) {
+                if (! $record['active'] || $record['answer'] === '') {
+                    continue;
+                }
+                foreach (array_merge([$record['canonical_question']], $record['aliases']) as $phrase) {
+                    $key = $this->normalize($phrase);
+                    $index[$key][$this->canonicalId($record['id'])] = true;
+                }
+            }
+
+            return $index;
+        });
+
+        return array_keys($index[$normalized] ?? []);
+    }
+
+    private function briefDescription(array $record): string
+    {
+        $text = mb_strtolower(trim((string) $record['canonical_question']));
+        $text = trim((string) preg_replace('/^[¿¡]|[?!¡¿]+$/u', '', $text));
+
+        $words = preg_split('/\s+/u', $text) ?: [];
+
+        return ucfirst(implode(' ', array_slice($words, 0, 6))).'.';
+    }
+
+    private function normalize(string $text): string
+    {
+        $text = strtr(mb_strtolower(trim($text)), ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u']);
+
+        return trim((string) preg_replace('/\s+/u', ' ', preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $text) ?? ''));
     }
 
     private function record(string $id, string $topic, string $question, array $aliases, string $answer, bool $active = true, array $metadata = [], ?string $description = null): array

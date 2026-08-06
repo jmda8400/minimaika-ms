@@ -19,7 +19,7 @@ class FullCatalogIntentClassificationTest extends TestCase
 
         $this->assertSame('answer.greeting', $result['sources'][0]['id']);
         $this->assertSame((new ApprovedResponseCatalog())->active('answer.greeting')['answer'], $result['answer']);
-        $this->assertContains('answer.greeting', $result['debug']['intent_ids_sent_to_groq']);
+        $this->assertSame('exact_alias', $result['debug']['resolution']);
     }
 
     public static function greetingQueries(): array
@@ -67,7 +67,7 @@ class FullCatalogIntentClassificationTest extends TestCase
     private function routerSelecting(?string $id, float $confidence = .97): RagBotService
     {
         $groq = $this->createMock(GroqChatService::class);
-        $groq->expects($this->once())->method('routeApprovedResponse')
+        $groq->method('routeApprovedResponse')
             ->with($this->isType('string'), $this->callback(function (array $entries): bool {
                 return count($entries) === count((new ApprovedResponseCatalog())->classifierEntries());
             }))

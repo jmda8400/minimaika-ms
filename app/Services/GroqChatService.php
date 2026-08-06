@@ -4,12 +4,14 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Client\ConnectionException;
 use Throwable;
 
 class GroqChatService
 {
     /** @var array{type:string,body?:string,status?:int,message?:string}|null */
     private ?array $lastFailure = null;
+    private array $lastMetrics = [];
 
     /**
      * Classify against the complete compact catalog. Validation deliberately
@@ -25,7 +27,7 @@ class GroqChatService
         }
 
         $content = $this->generate(
-            'Sos un clasificador de intenciones para el asistente del Refugio Agostino Rocca. Tu única tarea es elegir la intención que mejor represente el mensaje del usuario. No respondas la consulta. No redactes contenido para el usuario. No inventes políticas. No uses conocimiento externo. Elegí únicamente un ID incluido en el catálogo. Interpretá sinónimos, errores ortográficos y formas naturales de hablar. Una pregunta como "¿Cómo están?" es un saludo. Los datos como fechas, cantidades y códigos no cambian necesariamente la intención principal. Si ninguna intención corresponde razonablemente, devolvé unknown usando intent_id null y confidence 0. Respondé exclusivamente JSON válido con intent_id, confidence, reason y entities.',
+            'Clasificá el mensaje para el Refugio Agostino Rocca. Elegí solo un ID del catálogo; no respondas, no generes texto libre ni uses conocimiento externo. Interpretá sinónimos y errores. Cuando haya un saludo y una consulta concreta, ignorá el saludo y elegí la consulta sustantiva. Si ninguna intención corresponde, usá intent_id null y confidence 0. Devolvé solo JSON válido con intent_id, confidence, reason y entities.',
             json_encode(['message' => $question, 'catalog' => $candidates, 'schema' => ['intent_id' => 'ID del catálogo o null', 'confidence' => 'número entre 0 y 1', 'reason' => 'solo para logs', 'entities' => new \stdClass()]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
             ['temperature' => 0, 'max_tokens' => 180, 'top_p' => 1, 'response_format' => ['type' => 'json_object']],
         );
@@ -35,6 +37,7 @@ class GroqChatService
                 '_raw_response' => $this->lastFailure['body'] ?? null,
                 '_parse_error' => true,
                 '_groq_error' => $this->lastFailure,
+                '_metrics' => $this->lastMetrics,
             ];
         }
 
@@ -65,6 +68,7 @@ class GroqChatService
 
         $decision['entities'] = is_array($decision['entities'] ?? null) ? $decision['entities'] : [];
         $decision['_raw_response'] = $raw;
+        $decision['_metrics'] = $this->lastMetrics;
 
         return $decision;
     }
@@ -72,6 +76,7 @@ class GroqChatService
     public function generate(string $systemPrompt, string $userPrompt, array $options = []): ?string
     {
         $this->lastFailure = null;
+        $this->lastMetrics = [];
         $config = config('services.groq');
         $apiKey = (string) ($config['api_key'] ?? '');
         $baseUrl = (string) ($config['base_url'] ?? 'https://api.groq.com/openai/v1/chat/completions');
@@ -117,9 +122,26 @@ class GroqChatService
                 ]);
             }
 
-            $response = Http::withToken($apiKey)
-                ->timeout($timeout)
-                ->post($baseUrl, $payload);
+            $started = hrtime(true);
+            $response = Http::withToken($apiKey)->timeout($timeout)->post($baseUrl, $payload);
+
+            if ($this->isRateLimit($response)) {
+                $retryAfter = $this->retryAfterSeconds($response);
+                $maximumWait = (int) ($config['rate_limit_retry_max_seconds'] ?? 1);
+                if ($retryAfter !== null && $retryAfter <= $maximumWait) {
+                    usleep(($retryAfter * 1_000_000) + random_int(20_000, 150_000));
+                    $response = Http::withToken($apiKey)->timeout($timeout)->post($baseUrl, $payload);
+                }
+            }
+
+            $jsonBody = $response->json();
+            $this->lastMetrics = [
+                'prompt_tokens' => data_get($jsonBody, 'usage.prompt_tokens'),
+                'completion_tokens' => data_get($jsonBody, 'usage.completion_tokens'),
+                'total_tokens' => data_get($jsonBody, 'usage.total_tokens'),
+                'model' => data_get($jsonBody, 'model', $model),
+                'response_time_ms' => (int) round((hrtime(true) - $started) / 1_000_000),
+            ];
 
             if (app()->isLocal() || config('app.debug')) {
                 Log::debug('Respuesta HTTP de Groq', [
@@ -132,10 +154,12 @@ class GroqChatService
             }
 
             if ($response->failed()) {
+                $rateLimited = $this->isRateLimit($response);
                 $this->lastFailure = [
-                    'type' => 'http',
+                    'type' => $rateLimited ? 'groq_rate_limit' : 'groq_http_error',
                     'status' => $response->status(),
                     'body' => $response->body(),
+                    'retry_after' => $this->retryAfterSeconds($response),
                 ];
                 Log::error('Error de respuesta Groq.', [
                     'status' => $response->status(),
@@ -150,7 +174,7 @@ class GroqChatService
             $content = data_get($response->json(), 'choices.0.message.content');
             if (! is_string($content) || trim($content) === '') {
                 $this->lastFailure = [
-                    'type' => 'missing_content',
+                    'type' => 'groq_empty_response',
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ];
@@ -166,8 +190,10 @@ class GroqChatService
 
             return trim($content);
         } catch (Throwable $exception) {
+            $isConnection = $exception instanceof ConnectionException;
+            $isTimeout = $isConnection && str_contains(mb_strtolower($exception->getMessage()), 'timed out');
             $this->lastFailure = [
-                'type' => 'exception',
+                'type' => $isTimeout ? 'groq_timeout' : ($isConnection ? 'groq_connection_error' : 'groq_http_error'),
                 'message' => $exception->getMessage(),
             ];
             Log::error('Excepción al llamar a Groq.', [
@@ -177,5 +203,22 @@ class GroqChatService
 
             return null;
         }
+    }
+
+    private function isRateLimit($response): bool
+    {
+        return $response->status() === 429
+            || data_get($response->json(), 'error.code') === 'rate_limit_exceeded'
+            || data_get($response->json(), 'error.type') === 'tokens';
+    }
+
+    private function retryAfterSeconds($response): ?int
+    {
+        $value = $response->header('Retry-After');
+        if ($value === null || $value === '' || ! is_numeric($value)) {
+            return null;
+        }
+
+        return max(0, (int) ceil((float) $value));
     }
 }

@@ -119,6 +119,21 @@ class RagBotService
 
     private function classifyAgainstFullCatalog(ApprovedResponseCatalog $catalog, string $original, string $normalized): array
     {
+        $exactMatches = $catalog->exactMatches($normalized);
+        if (count($exactMatches) === 1) {
+            $id = $exactMatches[0];
+            $record = $catalog->active($id) ?? $catalog->active('fallback.unknown');
+            $debug = [
+                'user_message' => $original, 'total_active_intents' => count($catalog->classifierEntries()),
+                'intent_ids_sent_to_groq' => [], 'catalog_sent_to_groq' => [], 'catalog_characters' => 0,
+                'groq_raw_response' => null, 'parsed_intent_id' => $id, 'confidence' => 1.0,
+                'validation_result' => 'accepted', 'fallback_reason' => null,
+                'selected_answer_id' => $record['id'], 'resolution' => 'exact_alias',
+            ];
+
+            return ['answer' => $record['answer'], 'sources' => [['id' => $record['id'], 'topic' => $record['intent']]], 'fragments' => [], 'source_type' => 'exact', 'prompt' => '', 'debug' => $debug];
+        }
+
         $configuredLimit = (int) config('services.rag.intent_catalog_limit', 0);
         $entries = $catalog->classifierEntries($configuredLimit > 0 ? $configuredLimit : null);
         $sentIds = array_map(static fn (array $entry): string => (string) $entry['id'], $entries);
@@ -147,16 +162,20 @@ class RagBotService
         $confidence = is_numeric($confidenceValue) ? (float) $confidenceValue : null;
         $reason = 'approved_id';
 
-        if ($decision === null || ($decision['_parse_error'] ?? false)) {
-            $reason = 'invalid_json';
+        if ($decision === null) {
+            $reason = 'groq_empty_response';
+        } elseif (($decision['_groq_error']['type'] ?? null) !== null) {
+            $reason = (string) $decision['_groq_error']['type'];
+        } elseif (($decision['_parse_error'] ?? false)) {
+            $reason = 'groq_invalid_json';
         } elseif ($intentId === null || $intentId === '') {
-            $reason = 'groq_unknown';
+            $reason = 'unknown_intent';
         } elseif (! is_numeric($confidenceValue) || $confidence < 0 || $confidence > 1) {
             $reason = 'confidence_out_of_range';
         } elseif (! in_array($intentId, $sentIds, true)) {
-            $reason = $catalog->active($intentId) === null ? 'invalid_or_inactive_id' : 'id_not_sent';
+            $reason = $catalog->active($intentId) === null ? 'invalid_intent_id' : 'invalid_intent_id';
         } elseif ($confidence < (float) config('services.rag.classifier_confidence_threshold', 0.65)) {
-            $reason = 'low_classifier_confidence';
+            $reason = 'low_confidence';
         }
 
         $selectedId = $reason === 'approved_id' ? $intentId : 'fallback.unknown';
@@ -166,12 +185,16 @@ class RagBotService
             'total_active_intents' => count($catalog->classifierEntries()),
             'intent_ids_sent_to_groq' => $sentIds,
             'catalog_sent_to_groq' => $entries,
+            'catalog_characters' => strlen(json_encode($entries, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: ''),
             'groq_raw_response' => $decision['_raw_response'] ?? null,
             'parsed_intent_id' => $intentId,
             'confidence' => $confidence,
             'validation_result' => $reason === 'approved_id' ? 'accepted' : 'rejected',
             'fallback_reason' => $reason === 'approved_id' ? null : $reason,
             'selected_answer_id' => $reason === 'approved_id' ? $record['id'] : null,
+            'groq_status' => $decision['_groq_error']['status'] ?? 200,
+            'retry_after' => $decision['_groq_error']['retry_after'] ?? null,
+            ...($decision['_metrics'] ?? []),
         ];
         Log::debug('classified_answers_classification', $debug);
 

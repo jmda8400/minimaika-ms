@@ -7,7 +7,7 @@ use Illuminate\Console\Command;
 
 class MinimaikaChatCommand extends Command
 {
-    protected $signature = 'minimaika:chat {--debug : Mostrar catálogo, respuesta cruda y validación}';
+    protected $signature = 'minimaika:chat {--debug : Mostrar diagnóstico resumido} {--show-catalog : Mostrar el catálogo compacto completo (requiere --debug)}';
 
     protected $description = 'Chat local de Minimaika usando RAG sin modelos externos';
 
@@ -48,11 +48,25 @@ class MinimaikaChatCommand extends Command
                 $this->newLine();
                 $this->info('Diagnóstico de clasificación:');
                 $this->line('Mensaje: '.($debug['user_message'] ?? $question));
-                $this->line('Catálogo enviado: '.json_encode($debug['catalog_sent_to_groq'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                $this->line('Catálogo de intenciones: '.count($debug['intent_ids_sent_to_groq'] ?? []));
+                $this->line('Caracteres del catálogo: '.($debug['catalog_characters'] ?? 0));
+                if ($this->option('show-catalog')) {
+                    $this->line('Catálogo enviado: '.json_encode($debug['catalog_sent_to_groq'] ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+                }
                 $this->line('Respuesta cruda de Groq: '.($debug['groq_raw_response'] ?? '(sin respuesta)'));
                 $this->line('Intención elegida: '.($debug['parsed_intent_id'] ?? 'unknown'));
                 $this->line('Confianza: '.($debug['confidence'] ?? 'n/a'));
-                $this->line('Validación: '.($debug['validation_result'] ?? 'n/a').(($debug['fallback_reason'] ?? null) ? ' ('.$debug['fallback_reason'].')' : ''));
+                $this->line('Groq status: '.($debug['groq_status'] ?? 'n/a'));
+                $this->line('Failure reason: '.($debug['fallback_reason'] ?? 'none'));
+                if (($debug['retry_after'] ?? null) !== null) {
+                    $this->line('Retry after: '.$debug['retry_after'].' seconds');
+                }
+                $this->line('Prompt tokens: '.($debug['prompt_tokens'] ?? 'n/a'));
+                $this->line('Completion tokens: '.($debug['completion_tokens'] ?? 'n/a'));
+                $this->line('Total tokens: '.($debug['total_tokens'] ?? 'n/a'));
+                $this->line('Modelo: '.($debug['model'] ?? 'n/a'));
+                $this->line('Tiempo de respuesta: '.($debug['response_time_ms'] ?? 'n/a').' ms');
+                $this->line('Resultado: '.($debug['validation_result'] ?? 'n/a'));
                 $this->line('Respuesta oficial seleccionada: '.($debug['selected_answer_id'] ?? 'fallback'));
             }
 

@@ -98,7 +98,7 @@ class GroqChatServiceTest extends TestCase
 
         $this->assertTrue($decision['_parse_error']);
         $this->assertSame($body, $decision['_raw_response']);
-        $this->assertSame('http', $decision['_groq_error']['type']);
+        $this->assertSame('groq_http_error', $decision['_groq_error']['type']);
         $this->assertSame(503, $decision['_groq_error']['status']);
         Log::shouldHaveReceived('debug')->with('Respuesta HTTP de Groq', \Mockery::on(
             fn (array $context): bool => $context['status'] === 503
@@ -122,6 +122,6 @@ class GroqChatServiceTest extends TestCase
 
         $this->assertTrue($decision['_parse_error']);
         $this->assertSame($body, $decision['_raw_response']);
-        $this->assertSame('missing_content', $decision['_groq_error']['type']);
+        $this->assertSame('groq_empty_response', $decision['_groq_error']['type']);
     }
 }
