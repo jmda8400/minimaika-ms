@@ -61,11 +61,10 @@ class BotSettingsTest extends TestCase
             ->assertSee('Volver a Administracion')
             ->assertSee('Reenviar mensajes que el bot no pudo interpretar')
             ->assertSee('+54 2944360712')
-            ->assertSee('Groq como clasificador semántico')
-            ->assertSee('La respuesta enviada sale textualmente de la base de conocimiento')
-            ->assertSee('Responder con IA generativa (Groq)')
-            ->assertSee('Groq redacta la respuesta usando la base de conocimiento')
-            ->assertSee('Respuestas: predefinidas, con encauzamiento automático cuando haga falta');
+            ->assertSee('Groq como router controlado')
+            ->assertSee('Groq nunca redacta mensajes')
+            ->assertDontSee('Responder con IA generativa (Groq)')
+            ->assertSee('Respuestas: exclusivamente del catálogo aprobado');
     }
 
     public function test_qr_page_redirects_to_settings_because_settings_shows_qr(): void

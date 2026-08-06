@@ -8,64 +8,38 @@ use Throwable;
 
 class GroqChatService
 {
-
     /**
-     * @param array<string, array{title:string,response:string,keywords:array<int,string>,score:float}> $candidates
-     * @return array{selected_key:?string,confidence:float,reason:?string}|null
+     * @param array<int,array{id:string,topic:string,description:string,score:float}> $candidates
+     * @return array{action:string,answer_id?:string,clarification_id?:string,fallback_id?:string}|null
      */
-    public function classifyPrewrittenResponse(string $question, array $candidates): ?array
+    public function routeApprovedResponse(string $question, array $candidates): ?array
     {
         if ($candidates === []) {
             return null;
         }
 
-        $candidateText = implode("\n", array_map(
-            static fn (string $key, array $item): string => json_encode([
-                'key' => $key,
-                'title' => $item['title'],
-                'keywords' => $item['keywords'],
-                'response_excerpt' => mb_substr($item['response'], 0, 500),
-            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
-            array_keys($candidates),
-            $candidates,
-        ));
-
-        $prompt = "Pregunta del usuario: {$question}\n\nCandidatas disponibles, una por línea en JSON:\n{$candidateText}\n\nDevolvé solamente JSON válido con selected_key, confidence y reason. selected_key debe ser una key candidata o null. No redactes respuesta final.";
+        $allowed = array_column($candidates, 'id');
         $content = $this->generate(
-            'Sos un clasificador semántico. Elegís cuál respuesta preescrita corresponde. No redactás, no resumís ni completás respuestas.',
-            $prompt,
-            ['temperature' => 0, 'max_tokens' => 120, 'top_p' => 1],
+            'Sos un router. Nunca redactes una respuesta al usuario. Elegí exclusivamente un identificador provisto y devolvé JSON.',
+            json_encode(['message' => $question, 'candidates' => array_map(static fn (array $candidate): array => [
+                'id' => $candidate['id'], 'topic' => $candidate['topic'], 'description' => $candidate['description'],
+            ], $candidates), 'schema' => ['action' => 'answer|clarify|fallback', 'answer_id' => 'id si action=answer', 'clarification_id' => 'id si action=clarify', 'fallback_id' => 'id si action=fallback']], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
+            ['temperature' => 0, 'max_tokens' => 80, 'top_p' => 1, 'response_format' => ['type' => 'json_object']],
         );
-
-        if ($content === null) {
-            return null;
-        }
-
-        $decoded = json_decode($content, true);
-        if (! is_array($decoded)) {
-            Log::warning('Groq devolvió una clasificación no JSON.', ['content' => $content]);
+        $decision = json_decode((string) $content, true);
+        if (! is_array($decision) || ! in_array($decision['action'] ?? null, ['answer', 'clarify', 'fallback'], true)) {
+            Log::warning('Groq devolvió una decisión de router inválida.');
 
             return null;
         }
-
-        $selectedKey = $decoded['selected_key'] ?? null;
-        $confidence = (float) ($decoded['confidence'] ?? 0);
-
-        if ($selectedKey !== null && (! is_string($selectedKey) || ! array_key_exists($selectedKey, $candidates))) {
-            Log::warning('Groq seleccionó una respuesta inexistente.', ['selected_key' => $selectedKey]);
+        $field = ['answer' => 'answer_id', 'clarify' => 'clarification_id', 'fallback' => 'fallback_id'][$decision['action']];
+        if (! is_string($decision[$field] ?? null) || ! in_array($decision[$field], $allowed, true)) {
+            Log::warning('Groq seleccionó un ID no permitido.', ['decision' => $decision]);
 
             return null;
         }
 
-        if ($confidence < 0 || $confidence > 1) {
-            return null;
-        }
-
-        return [
-            'selected_key' => $selectedKey,
-            'confidence' => $confidence,
-            'reason' => isset($decoded['reason']) ? (string) $decoded['reason'] : null,
-        ];
+        return $decision;
     }
 
     public function generate(string $systemPrompt, string $userPrompt, array $options = []): ?string
@@ -97,6 +71,9 @@ class GroqChatService
             'max_tokens' => $options['max_tokens'] ?? 220,
             'top_p' => $options['top_p'] ?? 0.9,
         ];
+        if (isset($options['response_format'])) {
+            $payload['response_format'] = $options['response_format'];
+        }
 
         try {
             $response = Http::withToken($apiKey)

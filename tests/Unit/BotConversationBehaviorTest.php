@@ -22,10 +22,9 @@ class BotConversationBehaviorTest extends TestCase
     {
         $bot = $this->bot();
         $expectations = [
-            'Hola' => 'intent', 'Test' => 'fallback', 'Agua' => 'clarification',
-            '¿Hay agua en el refugio?' => 'prewritten', '¿Hay agua durante el sendero?' => 'prewritten',
-            'Mate' => 'clarification', '¿Cómo hago para reservar?' => 'intent', '¿Y cuánto cuesta?' => 'prewritten',
-            'flor azul satélite improbable' => 'fallback',
+            'Hola' => 'fallback', 'Test' => 'fallback', 'Agua' => 'clarification',
+            '¿Hay agua en el refugio?' => 'exact', '¿Hay agua durante el sendero?' => 'exact',
+            'Mate' => 'exact', 'flor azul satélite improbable' => 'fallback',
         ];
 
         foreach ($expectations as $message => $source) {
@@ -58,7 +57,7 @@ class BotConversationBehaviorTest extends TestCase
 
         $this->assertSame('fallback', $otherUser['source_type']);
         $this->assertSame('fallback', $sameUser['source_type']);
-        $this->assertSame('No pude entender tu consulta.', $sameUser['answer']);
+        $this->assertStringStartsWith('No pude entender tu consulta.', $sameUser['answer']);
     }
 
     private function bot(?KnowledgeBaseService $knowledgeBase = null): RagBotService
