@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use App\Services\GroqChatService;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class GroqChatServiceTest extends TestCase
@@ -80,5 +81,47 @@ class GroqChatServiceTest extends TestCase
         ]);
 
         $this->assertNull($decision);
+    }
+
+    public function test_http_failure_preserves_the_complete_response_body_for_debugging(): void
+    {
+        config()->set('services.groq.api_key', 'test-key');
+        config()->set('app.debug', true);
+        $body = '{"error":{"message":"The model is unavailable"}}';
+        Http::fake(['*' => Http::response($body, 503, ['Content-Type' => 'application/json'])]);
+        Log::spy();
+
+        $decision = (new GroqChatService())->routeApprovedResponse('Hola', [[
+            'id' => 'answer.greeting',
+            'description' => 'Saludo',
+        ]]);
+
+        $this->assertTrue($decision['_parse_error']);
+        $this->assertSame($body, $decision['_raw_response']);
+        $this->assertSame('http', $decision['_groq_error']['type']);
+        $this->assertSame(503, $decision['_groq_error']['status']);
+        Log::shouldHaveReceived('debug')->with('Respuesta HTTP de Groq', \Mockery::on(
+            fn (array $context): bool => $context['status'] === 503
+                && $context['successful'] === false
+                && $context['content_type'] === 'application/json'
+                && $context['body'] === $body
+                && $context['json']['error']['message'] === 'The model is unavailable'
+        ))->once();
+    }
+
+    public function test_successful_response_without_message_content_is_not_silently_empty(): void
+    {
+        config()->set('services.groq.api_key', 'test-key');
+        $body = '{"choices":[{"message":{}}]}';
+        Http::fake(['*' => Http::response($body, 200, ['Content-Type' => 'application/json'])]);
+
+        $decision = (new GroqChatService())->routeApprovedResponse('Agua?', [[
+            'id' => 'clarify.water_type',
+            'description' => 'Aclarar tipo de agua',
+        ]]);
+
+        $this->assertTrue($decision['_parse_error']);
+        $this->assertSame($body, $decision['_raw_response']);
+        $this->assertSame('missing_content', $decision['_groq_error']['type']);
     }
 }

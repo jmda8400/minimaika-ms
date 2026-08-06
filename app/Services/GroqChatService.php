@@ -8,6 +8,9 @@ use Throwable;
 
 class GroqChatService
 {
+    /** @var array{type:string,body?:string,status?:int,message?:string}|null */
+    private ?array $lastFailure = null;
+
     /**
      * Classify against the complete compact catalog. Validation deliberately
      * lives in RagBotService, which knows which active IDs were actually sent.
@@ -27,7 +30,15 @@ class GroqChatService
             ['temperature' => 0, 'max_tokens' => 180, 'top_p' => 1, 'response_format' => ['type' => 'json_object']],
         );
 
-        $raw = (string) $content;
+        if ($content === null) {
+            return [
+                '_raw_response' => $this->lastFailure['body'] ?? null,
+                '_parse_error' => true,
+                '_groq_error' => $this->lastFailure,
+            ];
+        }
+
+        $raw = $content;
         $json = preg_replace('/^\s*```(?:json)?\s*|\s*```\s*$/iu', '', trim($raw)) ?? trim($raw);
         $decision = json_decode(trim($json), true);
         if (! is_array($decision)) {
@@ -60,13 +71,16 @@ class GroqChatService
 
     public function generate(string $systemPrompt, string $userPrompt, array $options = []): ?string
     {
+        $this->lastFailure = null;
         $config = config('services.groq');
         $apiKey = (string) ($config['api_key'] ?? '');
         $baseUrl = (string) ($config['base_url'] ?? 'https://api.groq.com/openai/v1/chat/completions');
         $model = (string) ($config['model'] ?? 'llama-3.1-8b-instant');
+        $timeout = (int) ($config['timeout'] ?? 15);
 
         if ($apiKey === '' || $baseUrl === '') {
             Log::warning('Groq no configurado correctamente.');
+            $this->lastFailure = ['type' => 'configuration'];
 
             return null;
         }
@@ -92,23 +106,70 @@ class GroqChatService
         }
 
         try {
+            if (app()->isLocal() || config('app.debug')) {
+                Log::debug('Petición HTTP a Groq', [
+                    'url' => $baseUrl,
+                    'model' => $model,
+                    'api_key_configured' => $apiKey !== '',
+                    'payload' => $payload,
+                    'timeout' => $timeout,
+                    'content_path' => 'choices.0.message.content',
+                ]);
+            }
+
             $response = Http::withToken($apiKey)
-                ->timeout(15)
+                ->timeout($timeout)
                 ->post($baseUrl, $payload);
 
+            if (app()->isLocal() || config('app.debug')) {
+                Log::debug('Respuesta HTTP de Groq', [
+                    'status' => $response->status(),
+                    'successful' => $response->successful(),
+                    'content_type' => $response->header('Content-Type'),
+                    'body' => $response->body(),
+                    'json' => $response->json(),
+                ]);
+            }
+
             if ($response->failed()) {
+                $this->lastFailure = [
+                    'type' => 'http',
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ];
                 Log::error('Error de respuesta Groq.', [
                     'status' => $response->status(),
-                    'body' => $response->json(),
+                    'content_type' => $response->header('Content-Type'),
+                    'body' => $response->body(),
+                    'json' => $response->json(),
                 ]);
 
                 return null;
             }
 
-            $content = trim((string) data_get($response->json(), 'choices.0.message.content', ''));
+            $content = data_get($response->json(), 'choices.0.message.content');
+            if (! is_string($content) || trim($content) === '') {
+                $this->lastFailure = [
+                    'type' => 'missing_content',
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ];
+                Log::error('La respuesta de Groq no contiene contenido utilizable.', [
+                    'status' => $response->status(),
+                    'content_path' => 'choices.0.message.content',
+                    'body' => $response->body(),
+                    'json' => $response->json(),
+                ]);
 
-            return $content !== '' ? $content : null;
+                return null;
+            }
+
+            return trim($content);
         } catch (Throwable $exception) {
+            $this->lastFailure = [
+                'type' => 'exception',
+                'message' => $exception->getMessage(),
+            ];
             Log::error('Excepción al llamar a Groq.', [
                 'message' => $exception->getMessage(),
                 'exception' => $exception::class,
