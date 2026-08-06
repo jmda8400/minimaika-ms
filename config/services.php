@@ -54,4 +54,10 @@ return [
         'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1/chat/completions'),
     ],
 
+    'rag' => [
+        'top_k' => (int) env('RAG_INITIAL_TOP_K', 12),
+        'retrieval_min_score' => (float) env('RAG_RETRIEVAL_MIN_SCORE', 0.12),
+        'classifier_confidence_threshold' => (float) env('RAG_CONFIDENCE_THRESHOLD', 0.55),
+    ],
+
 ];

@@ -43,6 +43,11 @@ class ControlledRagRouterTest extends TestCase
             'meal reservation' => ['Tengo que reservar comida?', 'meal_reservation'],
             'lodging reservation' => ['Tengo que reservar para dormir?', 'lodging_reservation'],
             'gluten free' => ['Hay comida para celíacos?', 'gluten_free'],
+            'generic reservation' => ['¿Cómo hago para reservar?', 'lodging_reservation'],
+            'November reservation' => ['¿Cómo hago para reservar en noviembre?', 'reserva_inicio_temporada'],
+            'Pampa Linda road' => ['¿Cómo es el camino a Pampa Linda?', 'horario_camino_pampa_linda'],
+            'road condition' => ['¿Qué tal el estado del camino?', 'estado_sendero'],
+            'Rocca trail condition' => ['¿Qué tal el sendero al Rocca?', 'estado_sendero'],
             'unknown' => ['teletransportame a una galaxia desconocida', 'fallback'],
         ];
     }
