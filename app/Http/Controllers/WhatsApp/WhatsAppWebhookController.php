@@ -46,7 +46,7 @@ class WhatsAppWebhookController extends Controller
             if ($settings['response_mode'] === 'default') {
                 $answer = $settings['default_message'];
             } else {
-                $botResponse = $this->ragBotService->answer($message['text'], null, $settings['use_generative_ai'], $message['phone']);
+                $botResponse = $this->ragBotService->answer($message['text'], null, $settings['ai_mode'], $message['phone']);
                 $answer = $botResponse['answer'];
 
                 if (($botResponse['source_type'] ?? null) === 'fallback' && $settings['notify_on_fallback'] && $settings['fallback_alert_phone'] !== '') {

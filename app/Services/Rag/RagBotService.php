@@ -31,8 +31,9 @@ class RagBotService
      *
      * @return array{answer:string,sources:array,fragments:array,source_type:string,prompt:string}
      */
-    public function answer(string $question, ?int $limit = null, bool $useGenerativeAi = true, ?string $conversationId = null): array
+    public function answer(string $question, ?int $limit = null, bool|string $aiMode = 'semantic_classifier', ?string $conversationId = null): array
     {
+        $aiMode = $this->normalizeAiMode($aiMode);
         $conversationId ??= '__default__';
         $question = trim($question);
         Log::info('Pregunta recibida en bot.', ['question' => $question, 'conversation_id' => $conversationId]);
@@ -62,6 +63,16 @@ class RagBotService
             return $this->finish($conversationId, $question, $previous, [], 'history');
         }
 
+        if ($aiMode === 'semantic_classifier' && ($classified = $this->classifyPrewrittenAnswer($question, $limit)) !== null) {
+            return $this->finish($conversationId, $question, $classified['answer'], [], 'groq_classifier', '', [[
+                'filename' => 'prewritten_responses',
+                'chunk_index' => 0,
+                'category' => 'prewritten',
+                'topic' => $classified['key'],
+                'location' => null,
+            ]]);
+        }
+
         $candidates = $this->knowledgeBaseService->search($question, $this->resolveCandidateLimit($limit));
         $fragments = $this->rerank($question, $candidates);
         $bestScore = (float) ($fragments[0]['rerank_score'] ?? 0);
@@ -88,13 +99,44 @@ class RagBotService
         $answer = $this->extractiveAnswer($fragments);
         $prompt = $this->buildPrompt($question, $fragments, $this->recentHistory($conversationId));
 
-        if ($useGenerativeAi && ($generated = $this->groqChatService->generate('Respondés consultas del Refugio Agostino Rocca usando exclusivamente el contexto entregado.', $prompt)) !== null) {
+        if ($aiMode === 'generative' && ($generated = $this->groqChatService->generate('Respondés consultas del Refugio Agostino Rocca usando exclusivamente el contexto entregado.', $prompt)) !== null) {
             $answer = $generated;
         }
 
         Log::info('Rama RAG seleccionada.', ['best_score' => $bestScore, 'fragment_count' => count($fragments)]);
 
         return $this->finish($conversationId, $question, $answer, $fragments, 'rag', $prompt, $sources);
+    }
+
+    /**
+     * @return array{key:string,answer:string}|null
+     */
+    private function classifyPrewrittenAnswer(string $question, ?int $limit): ?array
+    {
+        $candidates = $this->prewrittenResponseService->candidatesForClassification($question, $this->resolveCandidateLimit($limit));
+        $classification = $this->groqChatService->classifyPrewrittenResponse($question, $candidates);
+
+        if ($classification === null || $classification['selected_key'] === null || $classification['confidence'] < $this->classifierConfidenceThreshold()) {
+            Log::info('Clasificación Groq descartada por baja confianza o respuesta inválida.', [
+                'confidence' => $classification['confidence'] ?? null,
+                'threshold' => $this->classifierConfidenceThreshold(),
+            ]);
+
+            return null;
+        }
+
+        $answer = $this->prewrittenResponseService->get($classification['selected_key']);
+
+        return $answer === null ? null : ['key' => $classification['selected_key'], 'answer' => $answer];
+    }
+
+    private function normalizeAiMode(bool|string $aiMode): string
+    {
+        if (is_bool($aiMode)) {
+            return $aiMode ? 'generative' : 'disabled';
+        }
+
+        return in_array($aiMode, ['disabled', 'generative', 'semantic_classifier'], true) ? $aiMode : 'semantic_classifier';
     }
 
     private function ambiguousResponse(string $question): ?string
@@ -171,6 +213,11 @@ class RagBotService
     private function confidenceThreshold(): float
     {
         return (float) env('RAG_CONFIDENCE_THRESHOLD', 0.55);
+    }
+
+    private function classifierConfidenceThreshold(): float
+    {
+        return (float) env('GROQ_CLASSIFIER_CONFIDENCE_THRESHOLD', 0.75);
     }
 
     private function normalize(string $text): string
