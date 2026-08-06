@@ -31,6 +31,11 @@ class RagBotService
         $normalized = $this->normalize($original);
         $conversationId ??= '__default__';
 
+        $detectedIntent = $this->intentDetectorService->detect($original);
+        if (($detectedIntent['intent'] ?? null) === 'saludo') {
+            return $this->finish($catalog, 'answer.greeting', 'exact', $original, $normalized, [], [], null, 'deterministic_greeting');
+        }
+
         if (($pending = Cache::get($this->pendingKey($conversationId))) === 'clarify.water_type') {
             $followUps = ['en el sendero' => 'answer.trail_water', 'sendero' => 'answer.trail_water', 'potable' => 'answer.refuge_drinking_water', 'en el refugio' => 'answer.refuge_drinking_water', 'caliente' => 'answer.hot_water', 'mate' => 'answer.hot_water'];
             if (isset($followUps[$normalized])) {
@@ -62,17 +67,22 @@ class RagBotService
         // A small margin is expected for neighboring FAQ intents (for example,
         // reservations in general versus November). Let Groq disambiguate those
         // candidates instead of discarding a clear query before classification.
-        if ($candidates === [] || $best < $minimumScore) {
-            $id = str_contains($normalized, 'agua') ? 'clarify.water_type' : 'fallback.unknown';
-            if ($id === 'clarify.water_type') {
-                Cache::put($this->pendingKey($conversationId), $id, self::PENDING_SECONDS);
-            }
+        $hasRetrievalMatch = $candidates !== [] && $best >= $minimumScore;
+        if (! $hasRetrievalMatch && str_contains($normalized, 'agua')) {
+            Cache::put($this->pendingKey($conversationId), 'clarify.water_type', self::PENDING_SECONDS);
 
-            return $this->finish($catalog, $id, str_starts_with($id, 'clarify.') ? 'clarification' : 'fallback', $original, $normalized, $candidates, [], null, 'low_retrieval_score');
+            return $this->finish($catalog, 'clarify.water_type', 'clarification', $original, $normalized, $candidates, [], null, 'low_retrieval_score');
         }
 
-        $routingCandidates = $candidates;
-        foreach (['clarify.water_type', 'fallback.unknown'] as $controlId) {
+        if (! $hasRetrievalMatch && $aiMode === 'disabled') {
+            return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, $candidates, [], null, 'low_retrieval_score');
+        }
+
+        $routingCandidates = $hasRetrievalMatch ? $candidates : [];
+        foreach (['answer.greeting', 'clarify.water_type', 'fallback.unknown'] as $controlId) {
+            if (in_array($controlId, array_column($routingCandidates, 'id'), true)) {
+                continue;
+            }
             $control = $catalog->active($controlId);
             $routingCandidates[] = ['id' => $control['id'], 'topic' => $control['topic'], 'description' => $control['canonical_question'], 'score' => 0.0];
         }

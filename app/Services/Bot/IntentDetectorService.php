@@ -196,7 +196,11 @@ class IntentDetectorService
 
     private function isGreetingOnly(string $text): bool
     {
-        return in_array($text, ['hola', 'hola buenas', 'hola buen dia', 'hola buenas tardes', 'hola buenas noches', 'buenas', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'como estas'], true);
+        if (in_array($text, ['hola', 'holis', 'hola buenas', 'hola buen dia', 'hola buenas tardes', 'hola buenas noches', 'buenas', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'como estas', 'saludos'], true)) {
+            return true;
+        }
+
+        return preg_match('/^hola+$/u', $text) === 1;
     }
 
     private function isPriceQuestion(string $text): bool
