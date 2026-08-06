@@ -22,7 +22,7 @@ class BotConversationBehaviorTest extends TestCase
     {
         $bot = $this->bot();
         $expectations = [
-            'Hola' => 'fallback', 'Test' => 'fallback', 'Agua' => 'clarification',
+            'Hola' => 'exact', 'Test' => 'fallback', 'Agua' => 'clarification',
             '¿Hay agua en el refugio?' => 'exact', '¿Hay agua durante el sendero?' => 'exact',
             'Mate' => 'exact', 'flor azul satélite improbable' => 'fallback',
         ];
@@ -33,6 +33,22 @@ class BotConversationBehaviorTest extends TestCase
             $this->assertNotSame('', trim($response['answer']), $message);
             $this->assertIsString($response['answer'], $message);
         }
+    }
+
+    /** @dataProvider greetingMessages */
+    public function test_greetings_receive_the_approved_welcome(string $message): void
+    {
+        $response = $this->bot()->answer($message, null, false, '5492944000000');
+
+        $this->assertSame('greeting', $response['sources'][0]['topic']);
+        $this->assertSame('¡Hola! Te comunicaste con el asistente virtual del Refugio Agostino Rocca. Puedo ayudarte con reservas, ubicación, acceso, horarios, servicios, caminatas, pagos y preguntas frecuentes. ¿En qué puedo ayudarte?', $response['answer']);
+    }
+
+    public static function greetingMessages(): array
+    {
+        return [
+            ['Hola'], ['Holaa'], ['Holis'], ['¡Buen día!'], ['Buenas!'], ['¿Qué tal?'], ['¿Cómo estás?'], ['Saludos'],
+        ];
     }
 
     public function test_ambiguous_water_asks_for_clarification_without_searching(): void

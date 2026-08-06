@@ -95,6 +95,45 @@ class ControlledRagRouterTest extends TestCase
         );
     }
 
+    public function test_semantic_classifier_can_recognize_an_unlisted_greeting(): void
+    {
+        $groq = $this->createMock(GroqChatService::class);
+        $groq->expects($this->once())->method('routeApprovedResponse')
+            ->with('Muy buenas gente', $this->callback(static fn (array $candidates): bool => in_array('answer.greeting', array_column($candidates, 'id'), true)))
+            ->willReturn([
+                'intents' => [['intent_id' => 'answer.greeting', 'confidence' => .96]],
+                'entities' => [],
+                '_raw_response' => '{}',
+            ]);
+        $router = new RagBotService(
+            $this->createMock(KnowledgeBaseService::class),
+            new IntentDetectorService(),
+            $groq,
+            new PrewrittenResponseService(),
+        );
+
+        $result = $router->answer('Muy buenas gente', null, 'semantic_classifier', 'phone-a');
+
+        $this->assertSame('answer.greeting', $result['sources'][0]['id']);
+        $this->assertSame('routed', $result['source_type']);
+    }
+
+    /** @dataProvider greetingWithQuestionQueries */
+    public function test_a_greeting_does_not_hide_a_concrete_question(string $query, string $expectedTopic): void
+    {
+        $result = $this->router()->answer($query, null, 'disabled', 'phone-a');
+
+        $this->assertSame($expectedTopic, $result['sources'][0]['topic']);
+    }
+
+    public static function greetingWithQuestionQueries(): array
+    {
+        return [
+            ['Hola, quiero hacer una reserva', 'lodging_reservation'],
+            ['Buenas, ¿hay comida sin gluten?', 'gluten_free'],
+        ];
+    }
+
     private function router(): RagBotService
     {
         return new RagBotService(

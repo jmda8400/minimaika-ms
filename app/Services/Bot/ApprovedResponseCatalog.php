@@ -13,6 +13,7 @@ class ApprovedResponseCatalog
     public function all(): array
     {
         $records = [
+            $this->record('answer.greeting', 'greeting', '¡Hola!', ['hola', 'hola buenas', 'hola buen dia', 'hola buenas tardes', 'hola buenas noches', 'buenas', 'buen dia', 'buenas tardes', 'buenas noches', 'que tal', 'como estas', 'saludos'], '¡Hola! Te comunicaste con el asistente virtual del Refugio Agostino Rocca. Puedo ayudarte con reservas, ubicación, acceso, horarios, servicios, caminatas, pagos y preguntas frecuentes. ¿En qué puedo ayudarte?'),
             $this->record('answer.trail_water', 'trail_water', '¿Hay agua en el sendero?', ['hay agua durante el sendero', 'agua en el sendero', 'en el sendero'], 'En el km 3 del sendero cruzás el río Castaño Overa. Desde el km 5 hasta el km 9 tenés cerca el río Alerce y, desde el km 9, hay varios cursos de agua para recargar.'),
             $this->record('answer.refuge_drinking_water', 'refuge_drinking_water', '¿Hay agua potable en el refugio?', ['hay agua para tomar', 'agua potable', 'potable', 'agua en el refugio'], 'Sí, el agua del refugio es potable.'),
             $this->record('answer.hot_water', 'hot_water', '¿Hay agua caliente?', ['hay agua para el mate', 'agua caliente para mate', 'caliente', 'mate'], 'En el refugio el agua caliente para mate, té o infusiones es gratis.'),
