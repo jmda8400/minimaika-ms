@@ -53,6 +53,8 @@ return [
         'model' => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
         'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1/chat/completions'),
         'timeout' => (int) env('GROQ_TIMEOUT', 15),
+        // Retry once only when Groq asks for a very short wait.
+        'rate_limit_retry_max_seconds' => (int) env('GROQ_RATE_LIMIT_RETRY_MAX_SECONDS', 1),
     ],
 
     'rag' => [

@@ -133,7 +133,7 @@ class PrewrittenResponseService
             'reprogramar_reserva' => [
                 'title' => 'REPROGRAMAR LA FECHA DE LA RESERVA',
                 'response' => 'En nuestra página web, al lado del botón para reservar, tenés el botón de reprogramación. En el voucher que recibiste por mail vas a encontrar el “código de reserva” grupal o individual. Con este código, desde el botón de reprogramar vas a poder hacerlo. Podés reprogramar hasta un día antes de la fecha de tu reserva.',
-                'keywords' => ['reprogramar', 'cambiar fecha', 'modificar reserva', 'cambio de fecha', 'codigo reserva', 'código reserva'],
+                'keywords' => ['quiero reprogramar mi reserva', 'quiero cambiar la fecha', 'reprogramar', 'cambiar fecha', 'modificar reserva', 'cambio de fecha', 'codigo reserva', 'código reserva'],
             ],
             'cocina_visitantes' => [
                 'title' => 'COCINA DE VISITANTES, PUEDO COCINAR, DONDE PUEDO COCINAR',
