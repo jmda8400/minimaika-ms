@@ -57,7 +57,9 @@ return [
     'rag' => [
         'top_k' => (int) env('RAG_INITIAL_TOP_K', 12),
         'retrieval_min_score' => (float) env('RAG_RETRIEVAL_MIN_SCORE', 0.12),
-        'classifier_confidence_threshold' => (float) env('RAG_CONFIDENCE_THRESHOLD', 0.55),
+        'classifier_confidence_threshold' => (float) env('CHATBOT_INTENT_MIN_CONFIDENCE', 0.65),
+        // 0 means the complete catalog. Set only after measuring prompt size.
+        'intent_catalog_limit' => (int) env('CHATBOT_INTENT_CATALOG_LIMIT', 0),
     ],
 
 ];

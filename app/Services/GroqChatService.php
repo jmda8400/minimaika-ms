@@ -9,8 +9,11 @@ use Throwable;
 class GroqChatService
 {
     /**
-     * @param array<int,array{id:string,topic:string,description:string,score:float}> $candidates
-     * @return array{intents:array<int,array{intent_id:string,confidence:float}>,entities:array<string,mixed>,_raw_response:string}|null
+     * Classify against the complete compact catalog. Validation deliberately
+     * lives in RagBotService, which knows which active IDs were actually sent.
+     *
+     * @param array<int,array{id:string,name?:string,topic?:string,description:string,examples?:array}> $candidates
+     * @return array<string,mixed>|null
      */
     public function routeApprovedResponse(string $question, array $candidates): ?array
     {
@@ -18,36 +21,39 @@ class GroqChatService
             return null;
         }
 
-        $allowed = array_column($candidates, 'id');
         $content = $this->generate(
-            'Sos exclusivamente un clasificador de intenciones. Interpretá lenguaje natural, sinónimos y errores ortográficos. Detectá una o, solamente si el mensaje realmente contiene dos consultas, hasta dos intenciones. Si el mensaje combina un saludo con una consulta concreta, elegí solamente la intención de la consulta y no la de saludo. Extraé fechas, cantidades y códigos literalmente presentes. Nunca respondas la consulta, redactes texto para el usuario, completes datos faltantes ni uses conocimiento externo. Elegí exclusivamente identificadores provistos; si ninguno corresponde elegí fallback. Devolvé solamente el JSON solicitado.',
-            json_encode(['message' => $question, 'candidates' => array_map(static fn (array $candidate): array => [
-                'id' => $candidate['id'], 'topic' => $candidate['topic'], 'description' => $candidate['description'],
-            ], $candidates), 'schema' => ['intents' => [['intent_id' => 'uno de los IDs provistos', 'confidence' => 'número entre 0 y 1']], 'entities' => ['dates' => [], 'quantities' => [], 'codes' => []]], 'constraints' => ['min_intents' => 1, 'max_intents' => 2]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
+            'Sos un clasificador de intenciones para el asistente del Refugio Agostino Rocca. Tu única tarea es elegir la intención que mejor represente el mensaje del usuario. No respondas la consulta. No redactes contenido para el usuario. No inventes políticas. No uses conocimiento externo. Elegí únicamente un ID incluido en el catálogo. Interpretá sinónimos, errores ortográficos y formas naturales de hablar. Una pregunta como "¿Cómo están?" es un saludo. Los datos como fechas, cantidades y códigos no cambian necesariamente la intención principal. Si ninguna intención corresponde razonablemente, devolvé unknown usando intent_id null y confidence 0. Respondé exclusivamente JSON válido con intent_id, confidence, reason y entities.',
+            json_encode(['message' => $question, 'catalog' => $candidates, 'schema' => ['intent_id' => 'ID del catálogo o null', 'confidence' => 'número entre 0 y 1', 'reason' => 'solo para logs', 'entities' => new \stdClass()]], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '',
             ['temperature' => 0, 'max_tokens' => 180, 'top_p' => 1, 'response_format' => ['type' => 'json_object']],
         );
-        $decision = json_decode((string) $content, true);
-        $intents = $decision['intents'] ?? null;
-        if (! is_array($decision) || ! is_array($intents) || count($intents) < 1 || count($intents) > 2) {
-            Log::warning('Groq devolvió una decisión de router inválida.', ['groq_raw_response' => $content]);
 
-            return null;
+        $raw = (string) $content;
+        $json = preg_replace('/^\s*```(?:json)?\s*|\s*```\s*$/iu', '', trim($raw)) ?? trim($raw);
+        $decision = json_decode(trim($json), true);
+        if (! is_array($decision)) {
+            Log::warning('Groq devolvió una decisión de clasificador inválida.', ['groq_raw_response' => $raw]);
+
+            return ['_raw_response' => $raw, '_parse_error' => true];
         }
 
-        $seen = [];
-        foreach ($intents as $index => $intent) {
-            $id = $intent['intent_id'] ?? null;
-            if (! is_array($intent) || ! is_string($id) || ! in_array($id, $allowed, true) || isset($seen[$id]) || ! is_numeric($intent['confidence'] ?? null)) {
-                Log::warning('Groq seleccionó una intención inválida o no permitida.', ['decision' => $decision, 'groq_raw_response' => $content]);
-
+        // Backward-compatible parsing for the previous envelope. New Groq
+        // prompts request one intent_id, but this keeps rolling deployments and
+        // integrations deterministic while callers migrate.
+        if (array_key_exists('intents', $decision)) {
+            $intents = $decision['intents'];
+            $allowed = array_map('strval', array_column($candidates, 'id'));
+            if (! is_array($intents) || $intents === [] || count($intents) > 2) {
                 return null;
             }
-            $seen[$id] = true;
-            $decision['intents'][$index]['confidence'] = max(0.0, min(1.0, (float) $intent['confidence']));
+            foreach ($intents as $intent) {
+                if (! is_array($intent) || ! array_key_exists('intent_id', $intent) || ! is_numeric($intent['confidence'] ?? null) || ! in_array((string) $intent['intent_id'], $allowed, true)) {
+                    return null;
+                }
+            }
         }
 
         $decision['entities'] = is_array($decision['entities'] ?? null) ? $decision['entities'] : [];
-        $decision['_raw_response'] = (string) $content;
+        $decision['_raw_response'] = $raw;
 
         return $decision;
     }

@@ -31,6 +31,12 @@ class RagBotService
         $normalized = $this->normalize($original);
         $conversationId ??= '__default__';
 
+        // classified_answers never uses retrieval as a gate: every active,
+        // answer-bearing intent is visible to the classifier.
+        if ($aiMode !== 'disabled') {
+            return $this->classifyAgainstFullCatalog($catalog, $original, $normalized);
+        }
+
         $detectedIntent = $this->intentDetectorService->detect($original);
         if (($detectedIntent['intent'] ?? null) === 'saludo') {
             return $this->finish($catalog, 'answer.greeting', 'exact', $original, $normalized, [], [], null, 'deterministic_greeting');
@@ -109,6 +115,74 @@ class RagBotService
         }
 
         return $this->finishMany($catalog, array_keys($ids), $original, $normalized, $candidates, $routingCandidates, $decision);
+    }
+
+    private function classifyAgainstFullCatalog(ApprovedResponseCatalog $catalog, string $original, string $normalized): array
+    {
+        $configuredLimit = (int) config('services.rag.intent_catalog_limit', 0);
+        $entries = $catalog->classifierEntries($configuredLimit > 0 ? $configuredLimit : null);
+        $sentIds = array_map(static fn (array $entry): string => (string) $entry['id'], $entries);
+        $decision = $this->groqChatService->routeApprovedResponse($original, $entries);
+
+        if (is_array($decision['intents'] ?? null) && count($decision['intents']) > 1) {
+            $legacyIds = [];
+            foreach ($decision['intents'] as $legacyChoice) {
+                $legacyId = trim((string) ($legacyChoice['intent_id'] ?? ''));
+                $legacyConfidence = $legacyChoice['confidence'] ?? null;
+                if ($legacyId === '' || ! in_array($legacyId, $sentIds, true) || ! is_numeric($legacyConfidence) || (float) $legacyConfidence < (float) config('services.rag.classifier_confidence_threshold', 0.65) || (float) $legacyConfidence > 1) {
+                    return $this->finish($catalog, 'fallback.unknown', 'fallback', $original, $normalized, [], $entries, $decision, 'invalid_legacy_classification');
+                }
+                $legacyIds[] = $legacyId;
+            }
+
+            return $this->finishMany($catalog, array_values(array_unique($legacyIds)), $original, $normalized, [], $entries, $decision);
+        }
+
+        // Accept the former array envelope temporarily so deployments can roll
+        // forward without breaking mocked/custom Groq adapters.
+        $choice = is_array($decision['intents'][0] ?? null) ? $decision['intents'][0] : $decision;
+        $rawId = $choice['intent_id'] ?? null;
+        $intentId = $rawId === null ? null : trim((string) $rawId);
+        $confidenceValue = $choice['confidence'] ?? null;
+        $confidence = is_numeric($confidenceValue) ? (float) $confidenceValue : null;
+        $reason = 'approved_id';
+
+        if ($decision === null || ($decision['_parse_error'] ?? false)) {
+            $reason = 'invalid_json';
+        } elseif ($intentId === null || $intentId === '') {
+            $reason = 'groq_unknown';
+        } elseif (! is_numeric($confidenceValue) || $confidence < 0 || $confidence > 1) {
+            $reason = 'confidence_out_of_range';
+        } elseif (! in_array($intentId, $sentIds, true)) {
+            $reason = $catalog->active($intentId) === null ? 'invalid_or_inactive_id' : 'id_not_sent';
+        } elseif ($confidence < (float) config('services.rag.classifier_confidence_threshold', 0.65)) {
+            $reason = 'low_classifier_confidence';
+        }
+
+        $selectedId = $reason === 'approved_id' ? $intentId : 'fallback.unknown';
+        $record = $catalog->active($selectedId) ?? $catalog->active('fallback.unknown');
+        $debug = [
+            'user_message' => $original,
+            'total_active_intents' => count($catalog->classifierEntries()),
+            'intent_ids_sent_to_groq' => $sentIds,
+            'catalog_sent_to_groq' => $entries,
+            'groq_raw_response' => $decision['_raw_response'] ?? null,
+            'parsed_intent_id' => $intentId,
+            'confidence' => $confidence,
+            'validation_result' => $reason === 'approved_id' ? 'accepted' : 'rejected',
+            'fallback_reason' => $reason === 'approved_id' ? null : $reason,
+            'selected_answer_id' => $reason === 'approved_id' ? $record['id'] : null,
+        ];
+        Log::debug('classified_answers_classification', $debug);
+
+        return [
+            'answer' => $record['answer'],
+            'sources' => [['id' => $record['id'], 'topic' => $record['intent']]],
+            'fragments' => [],
+            'source_type' => $reason === 'approved_id' ? 'routed' : 'fallback',
+            'prompt' => '',
+            'debug' => $debug,
+        ];
     }
 
     private function hybridCandidates(string $message, ApprovedResponseCatalog $catalog, int $limit): array
