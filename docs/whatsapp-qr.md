@@ -43,7 +43,7 @@ WHATSAPP_WEB_TIMEOUT=15
 5. Escanear el QR desde WhatsApp en el celular, entrando a **Dispositivos vinculados**.
 6. Revisar `http://localhost:8001/whatsapp/status` para confirmar el estado de conexión.
 
-Cuando llega un mensaje entrante, Laravel extrae el texto del payload, llama a `App\Services\Rag\RagBotService` y responde por el gateway usando el número remoto.
+Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbol determinístico y responde con texto aprobado y listas interactivas.
 
 ## Nota sobre webhooks locales
 

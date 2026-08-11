@@ -62,7 +62,7 @@ The Laravel framework is open-sourced software licensed under the [MIT license](
 
 La base de conocimiento real del bot se edita en archivos Markdown simples dentro de:
 
-- `storage/knowledge`
+- `config/navigation.php`: árbol determinístico de menús y respuestas.
 
 El comando de prueba para validar recuperación por coincidencia de palabras es:
 

@@ -48,21 +48,4 @@ return [
         'password' => env('BOT_SETTINGS_PASSWORD', 'frias'),
     ],
 
-    'groq' => [
-        'api_key' => env('GROQ_API_KEY'),
-        'model' => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
-        'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1/chat/completions'),
-        'timeout' => (int) env('GROQ_TIMEOUT', 15),
-        // Retry once only when Groq asks for a very short wait.
-        'rate_limit_retry_max_seconds' => (int) env('GROQ_RATE_LIMIT_RETRY_MAX_SECONDS', 1),
-    ],
-
-    'rag' => [
-        'top_k' => (int) env('RAG_INITIAL_TOP_K', 12),
-        'retrieval_min_score' => (float) env('RAG_RETRIEVAL_MIN_SCORE', 0.12),
-        'classifier_confidence_threshold' => (float) env('CHATBOT_INTENT_MIN_CONFIDENCE', 0.65),
-        // 0 means the complete catalog. Set only after measuring prompt size.
-        'intent_catalog_limit' => (int) env('CHATBOT_INTENT_CATALOG_LIMIT', 0),
-    ],
-
 ];
