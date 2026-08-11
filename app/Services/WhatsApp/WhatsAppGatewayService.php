@@ -34,6 +34,19 @@ class WhatsAppGatewayService
             ->throw();
     }
 
+    /** @param array<int,array{id:string,title:string,description:string}> $rows */
+    public function sendMenu(string $phone, string $title, string $button, array $rows): void
+    {
+        $this->request()->post($this->url('message/sendList'), [
+            'number' => $phone, 'title' => $title,
+            'description' => 'Elegí una opción de la lista.', 'buttonText' => $button,
+            'footerText' => 'Refugio Agostino Rocca',
+            'sections' => [['title' => 'Opciones', 'rows' => array_map(static fn (array $row): array => [
+                'title' => mb_substr($row['title'], 0, 24), 'description' => mb_substr($row['description'], 0, 72), 'rowId' => $row['id'],
+            ], $rows)]],
+        ])->throw();
+    }
+
     private function request(): PendingRequest
     {
         $apiKey = (string) config('services.whatsapp_web.api_key');

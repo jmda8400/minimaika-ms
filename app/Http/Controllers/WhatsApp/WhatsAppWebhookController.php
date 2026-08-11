@@ -4,7 +4,7 @@ namespace App\Http\Controllers\WhatsApp;
 
 use App\Http\Controllers\Controller;
 use App\Services\Bot\BotSettingsService;
-use App\Services\Rag\RagBotService;
+use App\Services\Bot\NavigationTreeService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -16,7 +16,7 @@ use Throwable;
 class WhatsAppWebhookController extends Controller
 {
     public function __construct(
-        private readonly RagBotService $ragBotService,
+        private readonly NavigationTreeService $navigation,
         private readonly WhatsAppGatewayService $whatsAppGatewayService,
         private readonly BotSettingsService $settingsService,
     ) {
@@ -46,15 +46,21 @@ class WhatsAppWebhookController extends Controller
             if ($settings['response_mode'] === 'default') {
                 $answer = $settings['default_message'];
             } else {
-                $botResponse = $this->ragBotService->answer($message['text'], null, $settings['ai_mode'], $message['phone']);
-                $answer = $botResponse['answer'];
+                $response = $this->navigation->navigate($message['text']);
+                if ($response['kind'] === 'answer') {
+                    $this->whatsAppGatewayService->sendText($message['phone'], $response['text']);
+                    $menu = $this->navigation->menu($response['parent']);
+                    $this->whatsAppGatewayService->sendMenu($message['phone'], '¿Querés consultar algo más?', $menu['button'], $menu['rows']);
 
-                if (($botResponse['source_type'] ?? null) === 'fallback' && $settings['notify_on_fallback'] && $settings['fallback_alert_phone'] !== '') {
-                    $this->whatsAppGatewayService->sendText(
-                        $settings['fallback_alert_phone'],
-                        "No he podido descifrar la intencion del siguiente mensaje:\n{$message['text']}",
-                    );
+                    return response()->json(['status' => 'sent']);
                 }
+
+                if ($message['text'] === '' || ! str_starts_with($message['text'], 'nav:')) {
+                    $this->whatsAppGatewayService->sendText($message['phone'], $this->navigation->welcome());
+                }
+                $this->whatsAppGatewayService->sendMenu($message['phone'], $response['title'], $response['button'], $response['rows']);
+
+                return response()->json(['status' => 'sent']);
             }
 
             $this->whatsAppGatewayService->sendText($message['phone'], $answer);
@@ -90,6 +96,9 @@ class WhatsAppWebhookController extends Controller
         $text = trim((string) (
             data_get($payload, 'data.message.conversation')
             ?? data_get($payload, 'data.message.extendedTextMessage.text')
+            ?? data_get($payload, 'data.message.listResponseMessage.singleSelectReply.selectedRowId')
+            ?? data_get($payload, 'data.message.buttonsResponseMessage.selectedButtonId')
+            ?? data_get($payload, 'data.message.templateButtonReplyMessage.selectedId')
             ?? data_get($payload, 'message.text')
             ?? data_get($payload, 'text')
             ?? ''

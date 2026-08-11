@@ -81,22 +81,6 @@
                 </div>
 
                 <div class="field">
-                    <label>Uso de Groq</label>
-                    <p class="hint">Groq nunca redacta mensajes: solo puede seleccionar identificadores de respuestas aprobadas.</p>
-                    <div class="options">
-                        <label class="option">
-                            <input type="radio" name="ai_mode" value="semantic_classifier" @checked(old('ai_mode', $settings['ai_mode']) === 'semantic_classifier')>
-                            <span><strong>Groq como router controlado</strong><br><span class="hint">Groq selecciona un ID de respuesta, aclaración o fallback. El texto enviado sale textualmente del catálogo aprobado.</span></span>
-                        </label>
-                        <label class="option">
-                            <input type="radio" name="ai_mode" value="disabled" @checked(old('ai_mode', $settings['ai_mode']) === 'disabled')>
-                            <span><strong>Sin Groq</strong><br><span class="hint">El router local selecciona exclusivamente respuestas del mismo catálogo aprobado.</span></span>
-                        </label>
-                    </div>
-                    @error('ai_mode')<div class="error">{{ $message }}</div>@enderror
-                </div>
-
-                <div class="field">
                     <label for="default_message">Mensaje por defecto</label>
                     <textarea id="default_message" name="default_message" required>{{ old('default_message', $settings['default_message']) }}</textarea>
                     @error('default_message')<div class="error">{{ $message }}</div>@enderror
@@ -110,23 +94,9 @@
                     @error('respond_to_groups')<div class="error">{{ $message }}</div>@enderror
                 </div>
 
-                <div class="field">
-                    <label class="checkbox">
-                        <input type="checkbox" name="notify_on_fallback" value="1" @checked(old('notify_on_fallback', $settings['notify_on_fallback']))>
-                        <span><strong>Reenviar mensajes que el bot no pudo interpretar</strong></span>
-                    </label>
-                    @error('notify_on_fallback')<div class="error">{{ $message }}</div>@enderror
-
-                    <div style="margin-top:16px">
-                        <label for="fallback_alert_phone">Número que recibe las alertas</label>
-                        <input id="fallback_alert_phone" name="fallback_alert_phone" type="text" value="{{ old('fallback_alert_phone', $settings['fallback_alert_phone']) }}" placeholder="+54 2944360712">
-                        @error('fallback_alert_phone')<div class="error">{{ $message }}</div>@enderror
-                    </div>
-                </div>
-
                 <div class="summary">
                     <strong>Estado actual</strong>
-                    Modo: {{ $settings['response_mode'] === 'default' ? 'mensaje por defecto' : 'bot' }} · Groq: {{ $settings['ai_mode'] === 'semantic_classifier' ? 'router controlado' : 'deshabilitado' }} · Respuestas: exclusivamente del catálogo aprobado · Grupos: {{ $settings['respond_to_groups'] ? 'habilitados' : 'ignorados' }}
+                    Modo: {{ $settings['response_mode'] === 'default' ? 'mensaje por defecto' : 'bot' }} · Navegación: árbol determinístico · Grupos: {{ $settings['respond_to_groups'] ? 'habilitados' : 'ignorados' }}
                 </div>
 
                 <div class="actions">
