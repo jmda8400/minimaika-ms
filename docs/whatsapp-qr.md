@@ -43,7 +43,7 @@ WHATSAPP_WEB_TIMEOUT=15
 5. Escanear el QR desde WhatsApp en el celular, entrando a **Dispositivos vinculados**.
 6. Revisar `http://localhost:8001/whatsapp/status` para confirmar el estado de conexión.
 
-Cuando llega un mensaje entrante, Laravel extrae el texto del payload, llama a `App\Services\Rag\RagBotService` y responde por el gateway usando el número remoto.
+Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbol determinístico y responde con texto aprobado y listas interactivas.
 
 ## Nota sobre webhooks locales
 
@@ -57,3 +57,6 @@ Cuando llega un mensaje entrante, Laravel extrae el texto del payload, llama a `
   - `GET /instance/connect/{instance}` para obtener QR.
   - `GET /instance/connectionState/{instance}` para ver estado.
   - `POST /message/sendText/{instance}` para enviar mensajes.
+  - `POST /message/sendList/{instance}` para listas interactivas. Si el gateway o su versión rechazan este endpoint, el bot registra el error y envía automáticamente el mismo menú como una lista numerada.
+
+Las selecciones numéricas quedan asociadas durante dos horas al último menú enviado a cada número. De este modo el fallback sigue recorriendo exactamente el mismo árbol, sin clasificación de texto libre. Después de un rechazo del gateway, el bot evita nuevos intentos interactivos durante diez minutos. Los menús de más de diez filas usan directamente el formato numerado para respetar el límite habitual de WhatsApp.

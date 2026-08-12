@@ -4,7 +4,7 @@ namespace App\Http\Controllers\WhatsApp;
 
 use App\Http\Controllers\Controller;
 use App\Services\Bot\BotSettingsService;
-use App\Services\Rag\RagBotService;
+use App\Services\Bot\NavigationTreeService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -16,7 +16,7 @@ use Throwable;
 class WhatsAppWebhookController extends Controller
 {
     public function __construct(
-        private readonly RagBotService $ragBotService,
+        private readonly NavigationTreeService $navigation,
         private readonly WhatsAppGatewayService $whatsAppGatewayService,
         private readonly BotSettingsService $settingsService,
     ) {
@@ -46,15 +46,25 @@ class WhatsAppWebhookController extends Controller
             if ($settings['response_mode'] === 'default') {
                 $answer = $settings['default_message'];
             } else {
-                $botResponse = $this->ragBotService->answer($message['text'], null, $settings['ai_mode'], $message['phone']);
-                $answer = $botResponse['answer'];
+                $selection = $this->navigation->resolveNumber(
+                    $message['text'],
+                    Cache::get($this->navigationKey($message['phone']), []),
+                );
+                $response = $this->navigation->navigate($selection);
+                if ($response['kind'] === 'answer') {
+                    $this->whatsAppGatewayService->sendText($message['phone'], $response['text']);
+                    $menu = $this->navigation->menu($response['parent']);
+                    $this->sendNavigationMenu($message['phone'], '¿Querés consultar algo más?', $menu);
 
-                if (($botResponse['source_type'] ?? null) === 'fallback' && $settings['notify_on_fallback'] && $settings['fallback_alert_phone'] !== '') {
-                    $this->whatsAppGatewayService->sendText(
-                        $settings['fallback_alert_phone'],
-                        "No he podido descifrar la intencion del siguiente mensaje:\n{$message['text']}",
-                    );
+                    return response()->json(['status' => 'sent']);
                 }
+
+                if ($selection === $message['text'] && ! str_starts_with($message['text'], 'nav:')) {
+                    $this->whatsAppGatewayService->sendText($message['phone'], $this->navigation->welcome());
+                }
+                $this->sendNavigationMenu($message['phone'], $response['title'], $response);
+
+                return response()->json(['status' => 'sent']);
             }
 
             $this->whatsAppGatewayService->sendText($message['phone'], $answer);
@@ -68,6 +78,41 @@ class WhatsAppWebhookController extends Controller
 
             return response()->json(['message' => 'Unable to process message'], 500);
         }
+    }
+
+    /** @param array{button:string,rows:array<int,array{id:string,title:string,description:string}>} $menu */
+    private function sendNavigationMenu(string $phone, string $title, array $menu): void
+    {
+        $optionIds = array_column($menu['rows'], 'id');
+        Cache::put($this->navigationKey($phone), $optionIds, now()->addHours(2));
+
+        if (count($menu['rows']) > 10 || Cache::get($this->interactiveMenuFailureKey(), false)) {
+            $this->whatsAppGatewayService->sendText($phone, $this->navigation->textMenu($title, $menu['rows']));
+
+            return;
+        }
+
+        try {
+            $this->whatsAppGatewayService->sendMenu($phone, $title, $menu['button'], $menu['rows']);
+        } catch (Throwable $exception) {
+            Cache::put($this->interactiveMenuFailureKey(), true, now()->addMinutes(10));
+            Log::warning('Se envía el menú textual porque falló el menú interactivo.', [
+                'phone_hash' => sha1($phone),
+                'rows' => count($menu['rows']),
+                'message' => $exception->getMessage(),
+            ]);
+            $this->whatsAppGatewayService->sendText($phone, $this->navigation->textMenu($title, $menu['rows']));
+        }
+    }
+
+    private function navigationKey(string $phone): string
+    {
+        return 'whatsapp-navigation:'.sha1($phone);
+    }
+
+    private function interactiveMenuFailureKey(): string
+    {
+        return 'whatsapp-interactive-menu-failed:'.sha1((string) config('services.whatsapp_web.instance'));
     }
 
     public function status(Request $request): JsonResponse|RedirectResponse
@@ -90,6 +135,9 @@ class WhatsAppWebhookController extends Controller
         $text = trim((string) (
             data_get($payload, 'data.message.conversation')
             ?? data_get($payload, 'data.message.extendedTextMessage.text')
+            ?? data_get($payload, 'data.message.listResponseMessage.singleSelectReply.selectedRowId')
+            ?? data_get($payload, 'data.message.buttonsResponseMessage.selectedButtonId')
+            ?? data_get($payload, 'data.message.templateButtonReplyMessage.selectedId')
             ?? data_get($payload, 'message.text')
             ?? data_get($payload, 'text')
             ?? ''
