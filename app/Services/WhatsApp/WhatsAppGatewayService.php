@@ -37,26 +37,35 @@ class WhatsAppGatewayService
     /** @param array<int,array{id:string,title:string,description:string}> $rows */
     public function sendMenu(string $phone, string $title, string $button, array $rows): void
     {
-        $response = $this->request()->post($this->url('message/sendList'), [
-            'number' => $phone, 'title' => $title,
-            'description' => 'Elegí una opción de la lista.', 'buttonText' => $button,
-            'footerText' => 'Refugio Agostino Rocca',
-            'sections' => [['title' => 'Opciones', 'rows' => array_map(static fn (array $row): array => [
-                'title' => mb_substr($row['title'], 0, 24), 'description' => mb_substr($row['description'], 0, 72), 'rowId' => $row['id'],
-            ], $rows)]],
-        ]);
+        $groups = array_chunk($rows, 3);
 
-        if ($response->failed()) {
-            Log::error('El gateway rechazó el menú interactivo de WhatsApp.', [
-                'endpoint' => 'message/sendList',
-                'status' => $response->status(),
-                'body' => $response->body(),
-                'instance' => (string) config('services.whatsapp_web.instance'),
-                'rows' => count($rows),
+        foreach ($groups as $index => $group) {
+            $response = $this->request()->post($this->url('message/sendButtons'), [
+                'number' => $phone,
+                'title' => $index === 0 ? $title : sprintf('%s (%d/%d)', $button, $index + 1, count($groups)),
+                'description' => 'Tocá una opción para continuar.',
+                'footer' => 'Refugio Agostino Rocca',
+                'buttons' => array_map(static fn (array $row): array => [
+                    'type' => 'reply',
+                    'displayText' => mb_substr($row['title'], 0, 20),
+                    'id' => $row['id'],
+                ], $group),
             ]);
-        }
 
-        $response->throw();
+            if ($response->failed()) {
+                Log::error('El gateway rechazó los botones interactivos de WhatsApp.', [
+                    'endpoint' => 'message/sendButtons',
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'instance' => (string) config('services.whatsapp_web.instance'),
+                    'buttons' => count($group),
+                    'group' => $index + 1,
+                    'groups' => count($groups),
+                ]);
+            }
+
+            $response->throw();
+        }
     }
 
     private function request(): PendingRequest
