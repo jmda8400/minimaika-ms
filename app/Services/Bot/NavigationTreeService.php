@@ -66,7 +66,7 @@ class NavigationTreeService
             $rows[] = ['id' => 'nav:main', 'title' => '🏠 Menú principal', 'description' => 'Volver al inicio'];
         }
 
-        return ['kind' => 'menu', 'title' => $id === 'main' ? 'Por favor seleccioná una opción para continuar' : $node['title'], 'button' => 'Ver opciones', 'rows' => $rows];
+        return ['kind' => 'menu', 'title' => $id === 'main' ? 'Por favor selecciona una opción para continuar' : $node['title'], 'button' => 'Ver opciones', 'rows' => $rows];
     }
 
     private function selectionId(string $selection): string
