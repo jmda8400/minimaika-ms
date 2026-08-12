@@ -85,8 +85,22 @@ class WhatsAppWebhookController extends Controller
     {
         $optionIds = array_column($menu['rows'], 'id');
         Cache::put($this->navigationKey($phone), $optionIds, now()->addHours(2));
+        $strategy = (string) config('services.whatsapp_web.menu_strategy', 'text');
 
-        if (count($menu['rows']) > 10 || Cache::get($this->interactiveMenuFailureKey(), false)) {
+        if (! in_array($strategy, ['text', 'buttons'], true)) {
+            Log::warning('Estrategia de menú de WhatsApp inválida; se usa texto.', [
+                'configured_strategy' => $strategy,
+            ]);
+            $strategy = 'text';
+        }
+
+        Log::info('Enviando menú de navegación de WhatsApp.', [
+            'strategy' => $strategy,
+            'phone_hash' => sha1($phone),
+            'rows' => count($menu['rows']),
+        ]);
+
+        if ($strategy === 'text' || count($menu['rows']) > 10 || Cache::get($this->interactiveMenuFailureKey(), false)) {
             $this->whatsAppGatewayService->sendText($phone, $this->navigation->textMenu($title, $menu['rows']));
 
             return;
