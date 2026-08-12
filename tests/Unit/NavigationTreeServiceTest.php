@@ -26,7 +26,24 @@ class NavigationTreeServiceTest extends TestCase
         $this->assertSame('Servicios', $submenu['title']);
         $this->assertSame('answer', $answer['kind']);
         $this->assertSame('services', $answer['parent']);
-        $this->assertStringContainsString('no permite acampar', $answer['text']);
+        $this->assertSame(
+            'En la zona del refugio Parques Nacionales no permite el acampe, para consultar las zonas de acampe comunicate con Parques Nacionales.',
+            $answer['text'],
+        );
+    }
+
+    public function test_answers_keep_the_approved_wording_without_summarizing_it(): void
+    {
+        $service = app(NavigationTreeService::class);
+
+        $rooms = $service->navigate('nav:rooms');
+        $bookingClaim = $service->navigate('nav:booking_claim');
+
+        $this->assertStringContainsString('El refugio posee 10 habitaciones con ocho camas en cada una.', $rooms['text']);
+        $this->assertStringContainsString('pondremos siempre nuestra mejor voluntad.', $rooms['text']);
+        $this->assertStringContainsString('Te recordamos los términos de la política de cambio', $bookingClaim['text']);
+        $this->assertStringContainsString('Este cambio quedará sujeto a disponibilidad.', $bookingClaim['text']);
+        $this->assertStringContainsString('• Fecha y código de reserva', $bookingClaim['text']);
     }
 
     public function test_welcome_contains_operational_links(): void
