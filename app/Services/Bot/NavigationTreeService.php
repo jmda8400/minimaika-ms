@@ -43,11 +43,12 @@ class NavigationTreeService
     /** @param array<int,string> $optionIds */
     public function resolveNumber(string $selection, array $optionIds): string
     {
-        if (! preg_match('/^\d+$/', trim($selection))) {
+        $selection = trim($selection);
+        if (! preg_match('/^(?:(?:opci[oó]n)\s+)?(\d+)(?!.*\d)(?:\s*[.)]|\s*[-–—:]\s*[^\d].*)?$/iu', $selection, $matches)) {
             return $selection;
         }
 
-        $index = (int) trim($selection) - 1;
+        $index = (int) $matches[1] - 1;
 
         return $optionIds[$index] ?? $selection;
     }

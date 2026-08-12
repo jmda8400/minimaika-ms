@@ -50,4 +50,18 @@ class NavigationTreeServiceTest extends TestCase
         $this->assertSame('nav:dollars', $service->resolveNumber('1', $ids));
         $this->assertSame('99', $service->resolveNumber('99', $ids));
     }
+
+    public function test_numeric_selection_accepts_common_natural_formats(): void
+    {
+        $service = app(NavigationTreeService::class);
+        $ids = ['nav:first', 'nav:second', 'nav:third'];
+
+        $this->assertSame('nav:second', $service->resolveNumber('2.', $ids));
+        $this->assertSame('nav:second', $service->resolveNumber('opción 2', $ids));
+        $this->assertSame('nav:second', $service->resolveNumber('Opcion 2', $ids));
+        $this->assertSame('nav:second', $service->resolveNumber('2 - Servicios', $ids));
+        $this->assertSame('opción 9', $service->resolveNumber('opción 9', $ids));
+        $this->assertSame('entre 1 y 2', $service->resolveNumber('entre 1 y 2', $ids));
+        $this->assertSame('2 - servicio 3', $service->resolveNumber('2 - servicio 3', $ids));
+    }
 }

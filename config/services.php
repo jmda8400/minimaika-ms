@@ -41,6 +41,7 @@ return [
         'instance' => env('WHATSAPP_WEB_INSTANCE', 'refugio-agostino-rocca'),
         'webhook_secret' => env('WHATSAPP_WEB_WEBHOOK_SECRET'),
         'timeout' => env('WHATSAPP_WEB_TIMEOUT', 15),
+        'menu_strategy' => env('WHATSAPP_WEB_MENU_STRATEGY', 'text'),
     ],
 
     'bot_settings' => [
