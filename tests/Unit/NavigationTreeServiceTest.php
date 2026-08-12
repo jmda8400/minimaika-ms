@@ -37,4 +37,17 @@ class NavigationTreeServiceTest extends TestCase
         $this->assertStringContainsString('#estado-del-sendero', $welcome);
         $this->assertStringContainsString('windguru', $welcome);
     }
+
+    public function test_text_menu_and_numeric_selection_are_deterministic(): void
+    {
+        $service = app(NavigationTreeService::class);
+        $menu = $service->menu('payments');
+        $text = $service->textMenu($menu['title'], $menu['rows']);
+        $ids = array_column($menu['rows'], 'id');
+
+        $this->assertStringContainsString("1. Pago en dólares", $text);
+        $this->assertStringContainsString('Respondé con el número', $text);
+        $this->assertSame('nav:dollars', $service->resolveNumber('1', $ids));
+        $this->assertSame('99', $service->resolveNumber('99', $ids));
+    }
 }

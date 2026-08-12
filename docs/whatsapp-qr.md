@@ -57,3 +57,6 @@ Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbo
   - `GET /instance/connect/{instance}` para obtener QR.
   - `GET /instance/connectionState/{instance}` para ver estado.
   - `POST /message/sendText/{instance}` para enviar mensajes.
+  - `POST /message/sendList/{instance}` para listas interactivas. Si el gateway o su versión rechazan este endpoint, el bot registra el error y envía automáticamente el mismo menú como una lista numerada.
+
+Las selecciones numéricas quedan asociadas durante dos horas al último menú enviado a cada número. De este modo el fallback sigue recorriendo exactamente el mismo árbol, sin clasificación de texto libre. Después de un rechazo del gateway, el bot evita nuevos intentos interactivos durante diez minutos. Los menús de más de diez filas usan directamente el formato numerado para respetar el límite habitual de WhatsApp.

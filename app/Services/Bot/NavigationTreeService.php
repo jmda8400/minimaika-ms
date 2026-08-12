@@ -28,6 +28,30 @@ class NavigationTreeService
         return self::WELCOME;
     }
 
+    /** @param array<int,array{id:string,title:string,description:string}> $rows */
+    public function textMenu(string $title, array $rows): string
+    {
+        $options = array_map(
+            static fn (array $row, int $index): string => sprintf('%d. %s', $index + 1, $row['title']),
+            $rows,
+            array_keys($rows),
+        );
+
+        return $title."\n\n".implode("\n", $options)."\n\nRespondé con el número de la opción.";
+    }
+
+    /** @param array<int,string> $optionIds */
+    public function resolveNumber(string $selection, array $optionIds): string
+    {
+        if (! preg_match('/^\d+$/', trim($selection))) {
+            return $selection;
+        }
+
+        $index = (int) trim($selection) - 1;
+
+        return $optionIds[$index] ?? $selection;
+    }
+
     /** @return array{kind:string,title:string,button:string,rows:array<int,array{id:string,title:string,description:string}>} */
     public function menu(string $id): array
     {
