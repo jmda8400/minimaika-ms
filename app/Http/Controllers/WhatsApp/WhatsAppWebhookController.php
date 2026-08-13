@@ -54,7 +54,7 @@ class WhatsAppWebhookController extends Controller
                 if ($response['kind'] === 'answer') {
                     $this->whatsAppGatewayService->sendText($message['phone'], $response['text']);
                     $menu = $this->navigation->menu($response['parent']);
-                    $this->sendNavigationMenu($message['phone'], '¿Querés consultar algo más?', $menu);
+                    $this->sendNavigationMenu($message['phone'], $this->navigation->followUp(), $menu);
 
                     return response()->json(['status' => 'sent']);
                 }

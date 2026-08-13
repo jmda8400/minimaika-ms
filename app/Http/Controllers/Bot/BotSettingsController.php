@@ -7,6 +7,7 @@ use App\Services\Bot\BotSettingsService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Throwable;
 
@@ -32,15 +33,63 @@ class BotSettingsController extends Controller
             'response_mode' => ['required', 'in:bot,default'],
             'default_message' => ['required', 'string', 'max:1000'],
             'respond_to_groups' => ['nullable', 'boolean'],
+            'bot_texts' => ['required', 'array'],
+            'bot_texts.welcome' => ['required', 'string', 'max:2000'],
+            'bot_texts.main_menu_title' => ['required', 'string', 'max:2000'],
+            'bot_texts.menu_button' => ['required', 'string', 'max:2000'],
+            'bot_texts.select_prompt' => ['required', 'string', 'max:2000'],
+            'bot_texts.follow_up' => ['required', 'string', 'max:2000'],
+            'bot_texts.back_title' => ['required', 'string', 'max:2000'],
+            'bot_texts.back_description' => ['required', 'string', 'max:2000'],
+            'bot_texts.option_description' => ['required', 'string', 'max:2000'],
+            'navigation' => ['required', 'array', 'min:1', 'max:30'],
+            'navigation.*.id' => ['nullable', 'string', 'max:80'],
+            'navigation.*.title' => ['required', 'string', 'max:120'],
+            'navigation.*.options' => ['required', 'array', 'min:1', 'max:50'],
+            'navigation.*.options.*.id' => ['nullable', 'string', 'max:80'],
+            'navigation.*.options.*.title' => ['required', 'string', 'max:120'],
+            'navigation.*.options.*.answer' => ['required', 'string', 'max:5000'],
         ]);
+
+        $navigation = $this->normalizeNavigation($validated['navigation']);
 
         $this->settingsService->save([
             'response_mode' => $validated['response_mode'],
             'default_message' => $validated['default_message'],
             'respond_to_groups' => $request->boolean('respond_to_groups'),
+            'bot_texts' => $validated['bot_texts'],
+            'navigation' => $navigation,
         ]);
 
         return redirect()->route('bot.settings.edit')->with('status', 'Configuración guardada.');
+    }
+
+    /** @param array<int,array<string,mixed>> $navigation */
+    private function normalizeNavigation(array $navigation): array
+    {
+        $used = ['main' => true];
+        $uniqueId = function (?string $id, string $title) use (&$used): string {
+            $base = Str::slug($id ?: $title, '_') ?: 'opcion';
+            $candidate = $base;
+            for ($number = 2; isset($used[$candidate]); $number++) {
+                $candidate = $base.'_'.$number;
+            }
+            $used[$candidate] = true;
+
+            return $candidate;
+        };
+
+        return array_map(function (array $category) use ($uniqueId): array {
+            return [
+                'id' => $uniqueId($category['id'] ?? null, $category['title']),
+                'title' => trim($category['title']),
+                'options' => array_map(fn (array $option): array => [
+                    'id' => $uniqueId($option['id'] ?? null, $option['title']),
+                    'title' => trim($option['title']),
+                    'answer' => trim($option['answer']),
+                ], $category['options']),
+            ];
+        }, $navigation);
     }
 
     public function forgetSession(): RedirectResponse
