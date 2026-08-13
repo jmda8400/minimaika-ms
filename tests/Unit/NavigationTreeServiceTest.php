@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\Bot\NavigationTreeService;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class NavigationTreeServiceTest extends TestCase
@@ -80,5 +81,39 @@ class NavigationTreeServiceTest extends TestCase
         $this->assertSame('opción 9', $service->resolveNumber('opción 9', $ids));
         $this->assertSame('entre 1 y 2', $service->resolveNumber('entre 1 y 2', $ids));
         $this->assertSame('2 - servicio 3', $service->resolveNumber('2 - servicio 3', $ids));
+    }
+
+    public function test_saved_texts_categories_and_new_options_are_used(): void
+    {
+        Storage::fake('local');
+        Storage::put('bot-settings.json', json_encode([
+            'bot_texts' => [
+                'welcome' => 'Bienvenida personalizada',
+                'main_menu_title' => 'Elegí tu consulta',
+                'menu_button' => 'Abrir',
+                'select_prompt' => 'Escribí un número.',
+                'follow_up' => '¿Algo más?',
+                'back_title' => 'Volver',
+                'back_description' => 'Ir al inicio',
+                'option_description' => 'Consultar',
+            ],
+            'navigation' => [[
+                'id' => 'custom',
+                'title' => 'Nueva categoría',
+                'options' => [[
+                    'id' => 'custom_answer',
+                    'title' => 'Nueva opción',
+                    'answer' => 'Respuesta personalizada',
+                ]],
+            ]],
+        ]));
+
+        $service = app(NavigationTreeService::class);
+
+        $this->assertSame('Bienvenida personalizada', $service->welcome());
+        $this->assertSame('Elegí tu consulta', $service->menu('main')['title']);
+        $this->assertSame('Nueva categoría', $service->menu('main')['rows'][0]['title']);
+        $this->assertSame('Respuesta personalizada', $service->navigate('nav:custom_answer')['text']);
+        $this->assertStringEndsWith('Escribí un número.', $service->textMenu('Menú', $service->menu('custom')['rows']));
     }
 }

@@ -6,6 +6,14 @@ class NavigationTreeService
 {
     public const WELCOME = "Bienvenido al BOT del refugio Agostino Rocca\nEste número vas a encontrar toda la información para organizar tu visita.\nPODRÁS REALIZAR TUS RESERVAS DESDE EL 1 DE OCTUBRE\nPara gestionar reservas o reprogramar: https://www.refugioagostinorocca.com\nEstado del sendero: https://www.refugioagostinorocca.com/#estado-del-sendero\nPronóstico: https://www.windguru.cz/95099\nMás información en nuestro sitio web https://www.refugioagostinorocca.com";
 
+    private ?array $resolvedNodes = null;
+
+    private ?array $resolvedTexts = null;
+
+    public function __construct(private readonly BotSettingsService $settingsService)
+    {
+    }
+
     /** @return array{kind:string,text?:string,title?:string,button?:string,rows?:array,parent?:string} */
     public function navigate(string $selection): array
     {
@@ -25,7 +33,7 @@ class NavigationTreeService
 
     public function welcome(): string
     {
-        return self::WELCOME;
+        return $this->texts()['welcome'];
     }
 
     /** @param array<int,array{id:string,title:string,description:string}> $rows */
@@ -37,7 +45,7 @@ class NavigationTreeService
             array_keys($rows),
         );
 
-        return $title."\n\n".implode("\n", $options)."\n\nRespondé con el número de la opción.";
+        return $title."\n\n".implode("\n", $options)."\n\n".$this->texts()['select_prompt'];
     }
 
     /** @param array<int,string> $optionIds */
@@ -60,13 +68,13 @@ class NavigationTreeService
         $rows = [];
         foreach ($node['children'] as $childId) {
             $child = $this->nodes()[$childId];
-            $rows[] = ['id' => 'nav:'.$childId, 'title' => $child['title'], 'description' => $child['description'] ?? 'Seleccionar'];
+            $rows[] = ['id' => 'nav:'.$childId, 'title' => $child['title'], 'description' => $child['description'] ?? $this->texts()['option_description']];
         }
         if ($id !== 'main') {
-            $rows[] = ['id' => 'nav:main', 'title' => '🏠 Menú principal', 'description' => 'Volver al inicio'];
+            $rows[] = ['id' => 'nav:main', 'title' => $this->texts()['back_title'], 'description' => $this->texts()['back_description']];
         }
 
-        return ['kind' => 'menu', 'title' => $id === 'main' ? 'Por favor selecciona una opción para continuar' : $node['title'], 'button' => 'Ver opciones', 'rows' => $rows];
+        return ['kind' => 'menu', 'title' => $id === 'main' ? $this->texts()['main_menu_title'] : $node['title'], 'button' => $this->texts()['menu_button'], 'rows' => $rows];
     }
 
     private function selectionId(string $selection): string
@@ -88,6 +96,31 @@ class NavigationTreeService
 
     private function nodes(): array
     {
-        return config('navigation.nodes');
+        if ($this->resolvedNodes !== null) {
+            return $this->resolvedNodes;
+        }
+
+        $nodes = ['main' => ['title' => 'Menú principal', 'children' => []]];
+        foreach ($this->settingsService->get()['navigation'] as $category) {
+            $nodes['main']['children'][] = $category['id'];
+            $nodes[$category['id']] = ['title' => $category['title'], 'children' => []];
+            foreach ($category['options'] as $option) {
+                $nodes[$category['id']]['children'][] = $option['id'];
+                $nodes[$option['id']] = ['title' => $option['title'], 'answer' => $option['answer'], 'parent' => $category['id']];
+            }
+        }
+
+        return $this->resolvedNodes = $nodes;
+    }
+
+    /** @return array<string,string> */
+    private function texts(): array
+    {
+        return $this->resolvedTexts ??= $this->settingsService->get()['bot_texts'];
+    }
+
+    public function followUp(): string
+    {
+        return $this->texts()['follow_up'];
     }
 }
