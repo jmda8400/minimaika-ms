@@ -14,7 +14,7 @@ class NavigationTreeService
     {
     }
 
-    /** @return array{kind:string,text?:string,title?:string,button?:string,rows?:array,parent?:string} */
+    /** @return array{kind:string,id?:string,text?:string,title?:string,button?:string,rows?:array,parent?:string} */
     public function navigate(string $selection): array
     {
         $id = $this->selectionId($selection);
@@ -28,7 +28,7 @@ class NavigationTreeService
             return $this->menu($id);
         }
 
-        return ['kind' => 'answer', 'text' => $node['answer'], 'parent' => $node['parent']];
+        return ['kind' => 'answer', 'id' => $id, 'text' => $node['answer'], 'parent' => $node['parent']];
     }
 
     public function welcome(): string

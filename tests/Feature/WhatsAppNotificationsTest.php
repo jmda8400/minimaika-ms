@@ -2,12 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\SendWhatsAppClaimAlert;
 use App\Services\WhatsApp\WhatsAppGatewayService;
 use App\Services\WhatsApp\WhatsAppNotificationService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -40,10 +38,9 @@ class WhatsAppNotificationsTest extends TestCase
             && $request['getParticipants'] === 'false');
     }
 
-    public function test_voucher_selection_queues_an_alert_with_the_customer_phone(): void
+    public function test_voucher_selection_immediately_sends_an_alert_with_the_customer_phone(): void
     {
         $this->storeNotificationSettings();
-        Queue::fake();
         Http::fake(['*' => Http::response(['ok' => true])]);
 
         $payload = [
@@ -57,9 +54,28 @@ class WhatsAppNotificationsTest extends TestCase
         $this->postJson(route('whatsapp.webhook'), $payload)->assertOk()->assertJson(['status' => 'sent']);
         $this->postJson(route('whatsapp.webhook'), $payload)->assertOk()->assertJson(['status' => 'duplicate']);
 
-        Queue::assertPushed(SendWhatsAppClaimAlert::class, 1);
-        Queue::assertPushed(SendWhatsAppClaimAlert::class, fn (SendWhatsAppClaimAlert $job): bool => $job->selection === 'missing_voucher'
-            && $job->customerPhone === '5492944000000');
+        Http::assertSentCount(3);
+        Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
+            && str_contains($request['text'], '+5492944000000')
+            && str_contains($request['text'], 'no haber recibido el voucher'));
+    }
+
+    public function test_claim_selected_by_its_visible_button_text_sends_the_alert(): void
+    {
+        $this->storeNotificationSettings();
+        Http::fake(['*' => Http::response(['ok' => true])]);
+
+        $this->postJson(route('whatsapp.webhook'), [
+            'instanceId' => 'rocca',
+            'data' => [
+                'key' => ['fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net', 'id' => 'claim-title'],
+                'message' => ['extendedTextMessage' => ['text' => 'Por reservas']],
+            ],
+        ])->assertOk()->assertJson(['status' => 'sent']);
+
+        Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
+            && str_contains($request['text'], '+5492944000000')
+            && str_contains($request['text'], 'problemas con la reserva'));
     }
 
     public function test_claim_alert_is_sent_to_the_configured_group(): void

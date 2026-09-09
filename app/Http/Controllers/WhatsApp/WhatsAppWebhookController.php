@@ -54,7 +54,7 @@ class WhatsAppWebhookController extends Controller
                 $response = $this->navigation->navigate($selection);
                 if ($response['kind'] === 'answer') {
                     $this->whatsAppGatewayService->sendText($message['phone'], $response['text']);
-                    $this->dispatchClaimAlert($selection, $message);
+                    $this->dispatchClaimAlert($response['id'], $message);
                     $menu = $this->navigation->menu($response['parent']);
                     $this->sendNavigationMenu($message['phone'], $this->navigation->followUp(), $menu);
 
@@ -191,9 +191,11 @@ class WhatsAppWebhookController extends Controller
         }
 
         try {
-            SendWhatsAppClaimAlert::dispatch($selectionId, $message['customer_phone']);
+            // Claim alerts are part of the webhook response path so they must not
+            // depend on a separately running queue worker to reach the group.
+            SendWhatsAppClaimAlert::dispatchSync($selectionId, $message['customer_phone']);
         } catch (Throwable $exception) {
-            Log::error('No se pudo encolar la alerta administrativa de WhatsApp.', [
+            Log::error('No se pudo enviar la alerta administrativa de WhatsApp.', [
                 'selection' => $selectionId,
                 'message' => $exception->getMessage(),
             ]);
