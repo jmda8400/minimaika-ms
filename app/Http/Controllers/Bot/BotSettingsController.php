@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Bot;
 use App\Http\Controllers\Controller;
 use App\Services\Bot\BotSettingsService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
+use App\Services\WhatsApp\WhatsAppNotificationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -16,6 +17,7 @@ class BotSettingsController extends Controller
     public function __construct(
         private readonly BotSettingsService $settingsService,
         private readonly WhatsAppGatewayService $whatsAppGatewayService,
+        private readonly WhatsAppNotificationService $notifications,
     ) {
     }
 
@@ -24,6 +26,11 @@ class BotSettingsController extends Controller
         return view('bot.settings', [
             'settings' => $this->settingsService->get(),
             'whatsApp' => $this->whatsAppState(),
+            'groups' => $this->groupsState(),
+            'notificationStatus' => [
+                'last_success' => cache('whatsapp-heartbeat-last-success'),
+                'last_error' => cache('whatsapp-heartbeat-last-error'),
+            ],
         ]);
     }
 
@@ -33,6 +40,12 @@ class BotSettingsController extends Controller
             'response_mode' => ['required', 'in:bot,default'],
             'default_message' => ['required', 'string', 'max:1000'],
             'respond_to_groups' => ['nullable', 'boolean'],
+            'notifications_enabled' => ['nullable', 'boolean'],
+            'notification_group_id' => ['nullable', 'required_if:notifications_enabled,1', 'string', 'max:120', 'regex:/^[^\s]+@g\.us$/'],
+            'notification_group_name' => ['nullable', 'string', 'max:200'],
+            'heartbeat_enabled' => ['nullable', 'boolean'],
+            'heartbeat_time' => ['required', 'date_format:H:i'],
+            'heartbeat_timezone' => ['required', 'timezone:all'],
             'bot_texts' => ['required', 'array'],
             'bot_texts.welcome' => ['required', 'string', 'max:2000'],
             'bot_texts.main_menu_title' => ['required', 'string', 'max:2000'],
@@ -57,6 +70,12 @@ class BotSettingsController extends Controller
             'response_mode' => $validated['response_mode'],
             'default_message' => $validated['default_message'],
             'respond_to_groups' => $request->boolean('respond_to_groups'),
+            'notifications_enabled' => $request->boolean('notifications_enabled'),
+            'notification_group_id' => $validated['notification_group_id'] ?? '',
+            'notification_group_name' => $validated['notification_group_name'] ?? '',
+            'heartbeat_enabled' => $request->boolean('heartbeat_enabled'),
+            'heartbeat_time' => $validated['heartbeat_time'],
+            'heartbeat_timezone' => $validated['heartbeat_timezone'],
             'bot_texts' => $validated['bot_texts'],
             'navigation' => $navigation,
         ]);
@@ -100,6 +119,31 @@ class BotSettingsController extends Controller
             return redirect()->route('bot.settings.edit')->with('status', 'Sesión de WhatsApp olvidada. QR nuevo disponible para reconexión.');
         } catch (Throwable) {
             return redirect()->route('bot.settings.edit')->with('status', 'No se pudo olvidar la sesión de WhatsApp. Gateway no disponible para completar la acción.');
+        }
+    }
+
+    public function testNotification(): RedirectResponse
+    {
+        try {
+            $this->notifications->sendTest();
+
+            return redirect()->route('bot.settings.edit')->with('status', 'Mensaje de prueba enviado al grupo de alertas.');
+        } catch (Throwable $exception) {
+            return redirect()->route('bot.settings.edit')->with('status', 'No se pudo enviar la prueba: '.$exception->getMessage());
+        }
+    }
+
+    /** @return array{available:bool,items:array<int,array{id:string,name:string}>,error:?string} */
+    private function groupsState(): array
+    {
+        try {
+            return ['available' => true, 'items' => $this->whatsAppGatewayService->groups(), 'error' => null];
+        } catch (Throwable) {
+            return [
+                'available' => false,
+                'items' => [],
+                'error' => 'No se pudo obtener la lista de grupos. Podés ingresar el identificador manualmente.',
+            ];
         }
     }
 

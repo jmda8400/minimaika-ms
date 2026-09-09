@@ -11,8 +11,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withCommands([
-        App\Console\Commands\MinimaikaChatCommand::class,
-        App\Console\Commands\MinimaikaKnowledgeTestCommand::class,
+        App\Console\Commands\SendWhatsAppHealthStatus::class,
     ])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\WhatsApp;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendWhatsAppClaimAlert;
 use App\Services\Bot\BotSettingsService;
 use App\Services\Bot\NavigationTreeService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
@@ -53,6 +54,7 @@ class WhatsAppWebhookController extends Controller
                 $response = $this->navigation->navigate($selection);
                 if ($response['kind'] === 'answer') {
                     $this->whatsAppGatewayService->sendText($message['phone'], $response['text']);
+                    $this->dispatchClaimAlert($selection, $message);
                     $menu = $this->navigation->menu($response['parent']);
                     $this->sendNavigationMenu($message['phone'], $this->navigation->followUp(), $menu);
 
@@ -140,7 +142,7 @@ class WhatsAppWebhookController extends Controller
 
     /**
      * @param array<string,mixed> $payload
-     * @return array{phone:string,text:string,is_group:bool,instance_id:string,message_id:?string}|null
+     * @return array{phone:string,customer_phone:string,text:string,is_group:bool,instance_id:string,message_id:?string}|null
      */
     private function extractIncomingMessage(array $payload, bool $respondToGroups): ?array
     {
@@ -165,11 +167,47 @@ class WhatsAppWebhookController extends Controller
 
         return [
             'phone' => $isGroup ? $remoteJid : (preg_replace('/\D+/', '', $remoteJid) ?? $remoteJid),
+            'customer_phone' => $this->customerPhone($payload, $remoteJid, $isGroup),
             'text' => $text,
             'is_group' => $isGroup,
             'instance_id' => (string) (data_get($payload, 'instanceId') ?? data_get($payload, 'instance') ?? config('services.whatsapp_web.instance')),
             'message_id' => data_get($payload, 'data.key.id') ?? data_get($payload, 'key.id') ?? data_get($payload, 'messageId'),
         ];
+    }
+
+    /**
+     * @param array{customer_phone:string,is_group:bool,instance_id:string,message_id:?string} $message
+     */
+    private function dispatchClaimAlert(string $selection, array $message): void
+    {
+        $settings = $this->settingsService->get();
+        if ($message['is_group'] || ! $settings['notifications_enabled'] || $settings['notification_group_id'] === '') {
+            return;
+        }
+
+        $selectionId = str_starts_with($selection, 'nav:') ? substr($selection, 4) : $selection;
+        if (! in_array($selectionId, ['booking_claim', 'missing_voucher'], true)) {
+            return;
+        }
+
+        try {
+            SendWhatsAppClaimAlert::dispatch($selectionId, $message['customer_phone']);
+        } catch (Throwable $exception) {
+            Log::error('No se pudo encolar la alerta administrativa de WhatsApp.', [
+                'selection' => $selectionId,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+    }
+
+    /** @param array<string,mixed> $payload */
+    private function customerPhone(array $payload, string $remoteJid, bool $isGroup): string
+    {
+        $jid = $isGroup
+            ? (string) (data_get($payload, 'data.key.participant') ?? data_get($payload, 'data.participant') ?? '')
+            : $remoteJid;
+
+        return preg_replace('/\D+/', '', explode('@', $jid)[0]) ?? '';
     }
 
     /** @param array{instance_id:string,message_id:?string} $message */

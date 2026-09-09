@@ -34,6 +34,42 @@ class WhatsAppGatewayService
             ->throw();
     }
 
+    /** @return array<int,array{id:string,name:string}> */
+    public function groups(): array
+    {
+        $payload = $this->request()
+            ->get($this->url('group/fetchAllGroups'), ['getParticipants' => 'false'])
+            ->throw()
+            ->json() ?? [];
+
+        $groups = data_get($payload, 'data', data_get($payload, 'groups', $payload));
+        if (! is_array($groups)) {
+            return [];
+        }
+
+        return collect($groups)
+            ->map(static function (mixed $group): ?array {
+                if (! is_array($group)) {
+                    return null;
+                }
+
+                $id = trim((string) ($group['id'] ?? data_get($group, 'groupMetadata.id') ?? ''));
+                if (! str_ends_with($id, '@g.us')) {
+                    return null;
+                }
+
+                return [
+                    'id' => $id,
+                    'name' => trim((string) ($group['subject'] ?? $group['name'] ?? data_get($group, 'groupMetadata.subject') ?? $id)),
+                ];
+            })
+            ->filter()
+            ->unique('id')
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
+            ->all();
+    }
+
     /** @param array<int,array{id:string,title:string,description:string}> $rows */
     public function sendMenu(string $phone, string $title, string $button, array $rows): void
     {

@@ -20,6 +20,7 @@ Route::prefix('whatsapp')->group(function (): void {
         Route::get('settings', [BotSettingsController::class, 'edit'])->name('bot.settings.edit');
         Route::put('settings', [BotSettingsController::class, 'update'])->name('bot.settings.update');
         Route::post('settings/forget-session', [BotSettingsController::class, 'forgetSession'])->name('bot.settings.forget-session');
+        Route::post('settings/test-notification', [BotSettingsController::class, 'testNotification'])->name('bot.settings.test-notification');
     });
     Route::get('status', [WhatsAppWebhookController::class, 'status'])->name('whatsapp.status');
     Route::redirect('qr', '/whatsapp/settings');

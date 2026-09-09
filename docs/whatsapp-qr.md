@@ -44,6 +44,40 @@ WHATSAPP_WEB_MENU_STRATEGY=text
 5. Escanear el QR desde WhatsApp en el celular, entrando a **Dispositivos vinculados**.
 6. Revisar `http://localhost:8001/whatsapp/status` para confirmar el estado de conexión.
 
+## Grupo de alertas administrativas
+
+La pantalla `/whatsapp/settings` permite elegir un grupo de la cuenta vinculada. La integración consulta
+`GET /group/fetchAllGroups/{instance}` y guarda el identificador estable del grupo (terminado en `@g.us`),
+no solamente su nombre. Si el gateway no puede listar los grupos, se puede ingresar ese identificador
+manualmente. Después de guardar, usar **Probar grupo de alertas** para comprobar el envío.
+
+Al habilitar las alertas, el grupo recibe:
+
+- una advertencia con el teléfono del cliente cuando elige `Pagué y no recibí voucher` o `Por reservas`;
+- una confirmación diaria, en el horario y zona configurados, únicamente cuando `connectionState` informa
+  que la sesión está conectada.
+
+Las alertas de reclamos se procesan mediante la cola. El servicio `queue` de `compose.yaml` ejecuta esos
+trabajos y realiza hasta cinco intentos. El servicio `scheduler` comprueba cada minuto si corresponde enviar
+el estado diario; una clave de caché evita repetirlo durante el mismo día. Para una instalación sin Docker
+Compose se deben mantener activos procesos equivalentes:
+
+```bash
+php artisan queue:work --tries=5 --timeout=60
+php artisan schedule:work
+```
+
+Para probar el heartbeat sin esperar al horario configurado:
+
+```bash
+php artisan whatsapp:send-health-status --force
+```
+
+Una sesión vencida no puede avisar por medio de esa misma conexión de WhatsApp. En ese caso no se envía
+un falso mensaje de éxito, el error queda registrado y la ausencia del heartbeat funciona como señal de
+alerta. Para una notificación explícita de caída se necesita además un canal independiente, como correo o
+un monitor externo.
+
 Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbol determinístico y responde con texto aprobado y menús numerados. El usuario puede responder `1`, `2`, `opción 2` o `2 - Servicios`.
 
 `WHATSAPP_WEB_MENU_STRATEGY=text` es el valor predeterminado y recomendado. Los menús numerados funcionan sin depender del protocolo interactivo privado de WhatsApp. `buttons` habilita experimentalmente los botones de respuesta y conserva el menú textual como fallback cuando el gateway devuelve un error. Una respuesta HTTP exitosa del gateway no garantiza que WhatsApp renderice el botón correctamente.
@@ -60,6 +94,7 @@ Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbo
   - `GET /instance/connect/{instance}` para obtener QR.
   - `GET /instance/connectionState/{instance}` para ver estado.
   - `POST /message/sendText/{instance}` para enviar mensajes.
+  - `GET /group/fetchAllGroups/{instance}` para completar el selector de grupos administrativos.
   - `POST /message/sendButtons/{instance}` solo si se configura la estrategia experimental `buttons`. Como WhatsApp admite hasta tres botones de respuesta por mensaje, los menús largos se dividen en grupos de tres. Si el gateway o su versión rechazan este endpoint, el bot registra el error y envía automáticamente el mismo menú como una lista numerada.
 
 Las selecciones numéricas quedan asociadas durante dos horas al último menú enviado a cada número. De este modo el fallback sigue recorriendo exactamente el mismo árbol, sin clasificación de texto libre. Después de un rechazo del gateway, el bot evita nuevos intentos interactivos durante diez minutos. Los menús de más de diez filas usan directamente el formato numerado para respetar el límite habitual de WhatsApp.
