@@ -121,9 +121,7 @@ class WhatsAppNotificationsTest extends TestCase
             ->assertOk()->assertJson(['status' => 'sent']);
 
         Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
-            && str_contains($request['text'], '+5492944000000')
-            && str_contains($request['text'], 'Pagué y no recibí voucher')
-            && str_contains($request['text'], 'Reservas'));
+            && $request['text'] === "⚠️ *Reclamo recibido*\n\nCliente: +5492944000000\nCategoría: Reservas\nOpción: Pagué y no recibí voucher");
     }
 
     public function test_alert_failure_does_not_prevent_the_normal_customer_response(): void

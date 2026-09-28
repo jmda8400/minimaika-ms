@@ -189,7 +189,6 @@ class WhatsAppWebhookController extends Controller
 
         try {
             $this->notifications->sendOptionAlert(
-                $response['id'],
                 $response['title'],
                 $response['parent_title'],
                 $message['customer_phone'],
