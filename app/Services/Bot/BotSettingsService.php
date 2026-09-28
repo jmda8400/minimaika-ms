@@ -36,7 +36,7 @@ class BotSettingsService
             'heartbeat_time' => (string) $settings['heartbeat_time'],
             'heartbeat_timezone' => (string) $settings['heartbeat_timezone'],
             'bot_texts' => $settings['bot_texts'],
-            'navigation' => $settings['navigation'],
+            'navigation' => $this->normalizeNavigation($settings['navigation']),
         ];
     }
 
@@ -91,7 +91,7 @@ class BotSettingsService
         ];
     }
 
-    /** @return array<int,array{id:string,title:string,options:array<int,array{id:string,title:string,answer:string}>}> */
+    /** @return array<int,array{id:string,title:string,options:array<int,array{id:string,title:string,answer:string,send_alert:bool}>}> */
     private function defaultNavigation(): array
     {
         $nodes = config('navigation.nodes', []);
@@ -102,11 +102,34 @@ class BotSettingsService
             $options = [];
             foreach ($category['children'] ?? [] as $optionId) {
                 $option = $nodes[$optionId];
-                $options[] = ['id' => $optionId, 'title' => $option['title'], 'answer' => $option['answer']];
+                $options[] = [
+                    'id' => $optionId,
+                    'title' => $option['title'],
+                    'answer' => $option['answer'],
+                    'send_alert' => (bool) ($option['send_alert'] ?? false),
+                ];
             }
             $categories[] = ['id' => $categoryId, 'title' => $category['title'], 'options' => $options];
         }
 
         return $categories;
+    }
+
+    /** @param array<int,array<string,mixed>> $navigation */
+    private function normalizeNavigation(array $navigation): array
+    {
+        return array_map(static function (array $category): array {
+            $category['options'] = array_map(static function (array $option): array {
+                // Preserve the two legacy claim alerts when upgrading a settings
+                // file created before per-option flags existed.
+                $option['send_alert'] = array_key_exists('send_alert', $option)
+                    ? (bool) $option['send_alert']
+                    : in_array($option['id'] ?? '', ['booking_claim', 'missing_voucher'], true);
+
+                return $option;
+            }, $category['options'] ?? []);
+
+            return $category;
+        }, $navigation);
     }
 }

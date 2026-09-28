@@ -14,7 +14,7 @@ class NavigationTreeService
     {
     }
 
-    /** @return array{kind:string,id?:string,text?:string,title?:string,button?:string,rows?:array,parent?:string} */
+    /** @return array{kind:string,id?:string,text?:string,title?:string,button?:string,rows?:array,parent?:string,parent_title?:string,send_alert?:bool} */
     public function navigate(string $selection): array
     {
         $id = $this->selectionId($selection);
@@ -28,7 +28,15 @@ class NavigationTreeService
             return $this->menu($id);
         }
 
-        return ['kind' => 'answer', 'id' => $id, 'text' => $node['answer'], 'parent' => $node['parent']];
+        return [
+            'kind' => 'answer',
+            'id' => $id,
+            'title' => $node['title'],
+            'text' => $node['answer'],
+            'parent' => $node['parent'],
+            'parent_title' => $this->nodes()[$node['parent']]['title'],
+            'send_alert' => $node['send_alert'],
+        ];
     }
 
     public function welcome(): string
@@ -106,7 +114,12 @@ class NavigationTreeService
             $nodes[$category['id']] = ['title' => $category['title'], 'children' => []];
             foreach ($category['options'] as $option) {
                 $nodes[$category['id']]['children'][] = $option['id'];
-                $nodes[$option['id']] = ['title' => $option['title'], 'answer' => $option['answer'], 'parent' => $category['id']];
+                $nodes[$option['id']] = [
+                    'title' => $option['title'],
+                    'answer' => $option['answer'],
+                    'parent' => $category['id'],
+                    'send_alert' => (bool) ($option['send_alert'] ?? false),
+                ];
             }
         }
 

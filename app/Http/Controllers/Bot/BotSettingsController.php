@@ -62,6 +62,7 @@ class BotSettingsController extends Controller
             'navigation.*.options.*.id' => ['nullable', 'string', 'max:80'],
             'navigation.*.options.*.title' => ['required', 'string', 'max:120'],
             'navigation.*.options.*.answer' => ['required', 'string', 'max:5000'],
+            'navigation.*.options.*.send_alert' => ['nullable', 'boolean'],
         ]);
 
         $navigation = $this->normalizeNavigation($validated['navigation']);
@@ -106,6 +107,7 @@ class BotSettingsController extends Controller
                     'id' => $uniqueId($option['id'] ?? null, $option['title']),
                     'title' => trim($option['title']),
                     'answer' => trim($option['answer']),
+                    'send_alert' => (bool) ($option['send_alert'] ?? false),
                 ], $category['options']),
             ];
         }, $navigation);
