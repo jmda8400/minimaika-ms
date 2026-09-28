@@ -29,7 +29,7 @@ WHATSAPP_WEB_API_KEY=secret
 WHATSAPP_WEB_INSTANCE=refugio-agostino-rocca
 WHATSAPP_WEB_WEBHOOK_SECRET=otro-secret-opcional
 WHATSAPP_WEB_TIMEOUT=15
-WHATSAPP_WEB_MENU_STRATEGY=text
+WHATSAPP_WEB_MENU_STRATEGY=buttons
 ```
 
 `WHATSAPP_WEB_WEBHOOK_SECRET` es opcional. Si se configura, el gateway debe enviar el mismo valor en el header `X-Webhook-Secret` cuando llame a `/whatsapp/webhook`.
@@ -53,12 +53,12 @@ manualmente. Después de guardar, usar **Probar grupo de alertas** para comproba
 
 Al habilitar las alertas, el grupo recibe:
 
-- una advertencia con el teléfono del cliente cuando elige `Pagué y no recibí voucher` o `Por reservas`;
+- una advertencia genérica con el teléfono del cliente cuando toca el botón `⚠️ Advertencia` junto a cualquier opción;
 - una confirmación diaria, en el horario y zona configurados, únicamente cuando `connectionState` informa
   que la sesión está conectada.
 
-Las alertas de reclamos se procesan mediante la cola. El servicio `queue` de `compose.yaml` ejecuta esos
-trabajos y realiza hasta cinco intentos. El servicio `scheduler` comprueba cada minuto si corresponde enviar
+Las solicitudes de ayuda se envían de manera síncrona durante el procesamiento del webhook para que no
+dependan de un worker separado. El servicio `scheduler` comprueba cada minuto si corresponde enviar
 el estado diario; una clave de caché evita repetirlo durante el mismo día. Para una instalación sin Docker
 Compose se deben mantener activos procesos equivalentes:
 
@@ -78,9 +78,9 @@ un falso mensaje de éxito, el error queda registrado y la ausencia del heartbea
 alerta. Para una notificación explícita de caída se necesita además un canal independiente, como correo o
 un monitor externo.
 
-Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbol determinístico y responde con texto aprobado y menús numerados. El usuario puede responder `1`, `2`, `opción 2` o `2 - Servicios`.
+Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbol determinístico y responde con texto aprobado. Cada opción interactiva se muestra junto a un botón `⚠️ Advertencia`; al tocarlo, el grupo configurado recibe el teléfono del cliente y un aviso de que necesita ayuda, sin clasificar el motivo. En el fallback textual el usuario puede responder `1`, `2`, `opción 2` o `2 - Servicios`, y pedir ayuda con `A1`, `A2`, etc.
 
-`WHATSAPP_WEB_MENU_STRATEGY=text` es el valor predeterminado y recomendado. Los menús numerados funcionan sin depender del protocolo interactivo privado de WhatsApp. `buttons` habilita experimentalmente los botones de respuesta y conserva el menú textual como fallback cuando el gateway devuelve un error. Una respuesta HTTP exitosa del gateway no garantiza que WhatsApp renderice el botón correctamente.
+`WHATSAPP_WEB_MENU_STRATEGY=buttons` es el valor predeterminado para mostrar los botones de opción y advertencia. La estrategia conserva el menú textual como fallback cuando el gateway devuelve un error. Se puede configurar `text` para usar siempre la alternativa numerada, que no depende del protocolo interactivo privado de WhatsApp. Una respuesta HTTP exitosa del gateway no garantiza que WhatsApp renderice el botón correctamente.
 
 ## Nota sobre webhooks locales
 
@@ -95,7 +95,7 @@ Cuando llega un mensaje entrante, Laravel extrae la selección, recorre el árbo
   - `GET /instance/connectionState/{instance}` para ver estado.
   - `POST /message/sendText/{instance}` para enviar mensajes.
   - `GET /group/fetchAllGroups/{instance}` para completar el selector de grupos administrativos.
-  - `POST /message/sendButtons/{instance}` solo si se configura la estrategia experimental `buttons`. Como WhatsApp admite hasta tres botones de respuesta por mensaje, los menús largos se dividen en grupos de tres. Si el gateway o su versión rechazan este endpoint, el bot registra el error y envía automáticamente el mismo menú como una lista numerada.
+  - `POST /message/sendButtons/{instance}` con la estrategia predeterminada `buttons`. Cada mensaje agrupa una opción y su botón de advertencia. Si el gateway o su versión rechazan este endpoint, el bot registra el error y envía automáticamente el mismo menú como una lista numerada.
 
 Las selecciones numéricas quedan asociadas durante dos horas al último menú enviado a cada número. De este modo el fallback sigue recorriendo exactamente el mismo árbol, sin clasificación de texto libre. Después de un rechazo del gateway, el bot evita nuevos intentos interactivos durante diez minutos. Los menús de más de diez filas usan directamente el formato numerado para respetar el límite habitual de WhatsApp.
 

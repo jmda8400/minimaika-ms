@@ -40,7 +40,12 @@ class NavigationTreeService
     public function textMenu(string $title, array $rows): string
     {
         $options = array_map(
-            static fn (array $row, int $index): string => sprintf('%d. %s', $index + 1, $row['title']),
+            static fn (array $row, int $index): string => sprintf(
+                '%d. %s%s',
+                $index + 1,
+                $row['title'],
+                $row['id'] === 'nav:main' ? '' : sprintf('  |  ⚠️ Ayuda: A%d', $index + 1),
+            ),
             $rows,
             array_keys($rows),
         );
@@ -52,6 +57,12 @@ class NavigationTreeService
     public function resolveNumber(string $selection, array $optionIds): string
     {
         $selection = trim($selection);
+        if (preg_match('/^(?:⚠(?:️)?\s*)?(?:ayuda\s*[:\-]?\s*)?a\s*(\d+)$/iu', $selection, $matches)) {
+            $optionId = $optionIds[(int) $matches[1] - 1] ?? null;
+
+            return $optionId === null || $optionId === 'nav:main' ? $selection : 'alert:'.substr($optionId, 4);
+        }
+
         if (! preg_match('/^(?:(?:opci[oó]n)\s+)?(\d+)(?!.*\d)(?:\s*[.)]|\s*[-–—:]\s*[^\d].*)?$/iu', $selection, $matches)) {
             return $selection;
         }
