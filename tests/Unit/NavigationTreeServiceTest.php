@@ -104,6 +104,7 @@ class NavigationTreeServiceTest extends TestCase
                     'id' => 'custom_answer',
                     'title' => 'Nueva opción',
                     'answer' => 'Respuesta personalizada',
+                    'send_alert' => true,
                 ]],
             ]],
         ]));
@@ -114,6 +115,8 @@ class NavigationTreeServiceTest extends TestCase
         $this->assertSame('Elegí tu consulta', $service->menu('main')['title']);
         $this->assertSame('Nueva categoría', $service->menu('main')['rows'][0]['title']);
         $this->assertSame('Respuesta personalizada', $service->navigate('nav:custom_answer')['text']);
+        $this->assertTrue($service->navigate('nav:custom_answer')['send_alert']);
+        $this->assertSame('Nueva categoría', $service->navigate('nav:custom_answer')['parent_title']);
         $this->assertStringEndsWith('Escribí un número.', $service->textMenu('Menú', $service->menu('custom')['rows']));
     }
 }

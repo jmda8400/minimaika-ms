@@ -57,7 +57,8 @@ class WhatsAppNotificationsTest extends TestCase
         Http::assertSentCount(3);
         Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
             && str_contains($request['text'], '+5492944000000')
-            && str_contains($request['text'], 'no haber recibido el voucher'));
+            && str_contains($request['text'], 'Pagué y no recibí voucher')
+            && str_contains($request['text'], 'Reclamos y solicitudes'));
     }
 
     public function test_claim_selected_by_its_visible_button_text_sends_the_alert(): void
@@ -75,7 +76,73 @@ class WhatsAppNotificationsTest extends TestCase
 
         Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
             && str_contains($request['text'], '+5492944000000')
-            && str_contains($request['text'], 'problemas con la reserva'));
+            && str_contains($request['text'], 'Por reservas')
+            && str_contains($request['text'], 'Reclamos y solicitudes'));
+    }
+
+    public function test_option_without_alert_enabled_only_replies_to_the_customer(): void
+    {
+        $this->storeNotificationSettings([[
+            'id' => 'custom_category',
+            'title' => 'Consultas',
+            'options' => [[
+                'id' => 'quiet_option',
+                'title' => 'Consulta sin aviso',
+                'answer' => 'Respuesta normal',
+                'send_alert' => false,
+            ]],
+        ]]);
+        Http::fake(['*' => Http::response(['ok' => true])]);
+
+        $this->postJson(route('whatsapp.webhook'), $this->message('quiet-option', 'nav:quiet_option'))
+            ->assertOk()->assertJson(['status' => 'sent']);
+
+        Http::assertSentCount(2);
+        Http::assertNotSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us');
+        Http::assertSent(fn ($request): bool => $request['number'] === '5492944000000'
+            && $request['text'] === 'Respuesta normal');
+    }
+
+    public function test_enabled_option_alert_contains_phone_option_and_category(): void
+    {
+        $this->storeNotificationSettings([[
+            'id' => 'reservations',
+            'title' => 'Reservas',
+            'options' => [[
+                'id' => 'custom_claim',
+                'title' => 'Pagué y no recibí voucher',
+                'answer' => 'En breve una persona se comunicará con vos.',
+                'send_alert' => true,
+            ]],
+        ]]);
+        Http::fake(['*' => Http::response(['ok' => true])]);
+
+        $this->postJson(route('whatsapp.webhook'), $this->message('custom-alert', 'nav:custom_claim'))
+            ->assertOk()->assertJson(['status' => 'sent']);
+
+        Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
+            && str_contains($request['text'], '+5492944000000')
+            && str_contains($request['text'], 'Pagué y no recibí voucher')
+            && str_contains($request['text'], 'Reservas'));
+    }
+
+    public function test_alert_failure_does_not_prevent_the_normal_customer_response(): void
+    {
+        $this->storeNotificationSettings();
+        Http::fakeSequence()
+            ->push(['ok' => true], 200)
+            ->push(['error' => 'group unavailable'], 500)
+            ->push(['ok' => true], 200);
+
+        $this->postJson(route('whatsapp.webhook'), $this->message('failed-alert', 'nav:missing_voucher'))
+            ->assertOk()->assertJson(['status' => 'sent']);
+
+        Http::assertSentCount(3);
+        $requests = collect(Http::recorded())->map(fn (array $pair) => $pair[0])->values();
+        $this->assertSame('5492944000000', $requests[0]['number']);
+        $this->assertSame('En breve una persona se comunicará con vos.', $requests[0]['text']);
+        $this->assertSame('120363000000000000@g.us', $requests[1]['number']);
+        $this->assertSame('5492944000000', $requests[2]['number']);
     }
 
     public function test_claim_alert_is_sent_to_the_configured_group(): void
@@ -118,15 +185,33 @@ class WhatsAppNotificationsTest extends TestCase
         $this->assertSame('La sesión no está conectada (estado: close).', Cache::get('whatsapp-heartbeat-last-error')['message']);
     }
 
-    private function storeNotificationSettings(): void
+    /** @param array<int,array<string,mixed>>|null $navigation */
+    private function storeNotificationSettings(?array $navigation = null): void
     {
-        Storage::put('bot-settings.json', json_encode([
+        $settings = [
             'notifications_enabled' => true,
             'notification_group_id' => '120363000000000000@g.us',
             'notification_group_name' => 'Administración',
             'heartbeat_enabled' => true,
             'heartbeat_time' => '09:00',
             'heartbeat_timezone' => 'America/Argentina/Buenos_Aires',
-        ]));
+        ];
+        if ($navigation !== null) {
+            $settings['navigation'] = $navigation;
+        }
+
+        Storage::put('bot-settings.json', json_encode($settings));
+    }
+
+    /** @return array<string,mixed> */
+    private function message(string $id, string $text): array
+    {
+        return [
+            'instanceId' => 'rocca',
+            'data' => [
+                'key' => ['fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net', 'id' => $id],
+                'message' => ['conversation' => $text],
+            ],
+        ];
     }
 }

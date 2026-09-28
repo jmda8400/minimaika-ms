@@ -68,8 +68,8 @@ $items = [
         ['missing_person', 'Estoy buscando a una persona perdida', 'Tenés que tener en cuenta que en la zona no hay señal y que el cerro Tronador está a 80 km de Bariloche, así que ya sea que regresen vía terrestre con su auto o el bus o regresen con el barco desde Puerto Blest, normalmente el horario de llegada va a ser después de las 20 hs y es probable que recién en ese horario tengan señal de celular. Si necesitás contactar con una persona que te va a orientar, contactá al WhatsApp del refugio.'],
     ],
     'claims' => [
-        ['booking_claim', 'Por reservas', "Te recordamos los términos de la política de cambio que fueron informados y aceptados en el momento de realizar la reserva:\n\nPOLÍTICA DE CAMBIOS O MODIFICACIÓN DE LA RESERVA\nEN NINGÚN CASO EL PAGO POR LOS SERVICIOS CONTRATADOS TIENE DEVOLUCIÓN.\nPodrás cambiar la fecha consignada en tu voucher, siempre que lo hicieras con una anticipación mínima de tres días a la fecha de tu llegada, y reprogramarla durante esta temporada hasta el cierre del refugio. Este cambio quedará sujeto a disponibilidad.\nEl pago realizado no es transferible para ser usado por otras personas para ningún tipo de servicio o consumos.\nEn caso que por razones fortuitas ajenas al concesionario del refugio, Parques Nacionales cierre el acceso a la zona sur del Parque y no sea posible llegar al refugio, se tendrá en consideración esta situación atípica y especial, dando la posibilidad al cliente de extender las fechas de reprogramación dejándola abierta para futuras temporadas. Para gestionar dicha reprogramación deberás contactarte a XXXX@gmail.com colocando en el asunto CIERRE FORTUITO, indicando:\n• Nombre completo\n• DNI\n• Fecha y código de reserva"],
-        ['missing_voucher', 'Pagué y no recibí voucher', 'En breve una persona se comunicará con vos.'],
+        ['booking_claim', 'Por reservas', "Te recordamos los términos de la política de cambio que fueron informados y aceptados en el momento de realizar la reserva:\n\nPOLÍTICA DE CAMBIOS O MODIFICACIÓN DE LA RESERVA\nEN NINGÚN CASO EL PAGO POR LOS SERVICIOS CONTRATADOS TIENE DEVOLUCIÓN.\nPodrás cambiar la fecha consignada en tu voucher, siempre que lo hicieras con una anticipación mínima de tres días a la fecha de tu llegada, y reprogramarla durante esta temporada hasta el cierre del refugio. Este cambio quedará sujeto a disponibilidad.\nEl pago realizado no es transferible para ser usado por otras personas para ningún tipo de servicio o consumos.\nEn caso que por razones fortuitas ajenas al concesionario del refugio, Parques Nacionales cierre el acceso a la zona sur del Parque y no sea posible llegar al refugio, se tendrá en consideración esta situación atípica y especial, dando la posibilidad al cliente de extender las fechas de reprogramación dejándola abierta para futuras temporadas. Para gestionar dicha reprogramación deberás contactarte a XXXX@gmail.com colocando en el asunto CIERRE FORTUITO, indicando:\n• Nombre completo\n• DNI\n• Fecha y código de reserva", true],
+        ['missing_voucher', 'Pagué y no recibí voucher', 'En breve una persona se comunicará con vos.', true],
         ['other_claim', 'Otros', "Contactate a XXXX@gmail.com colocando en el asunto tu solicitud, indicando:\n• Nombre completo\n• DNI\n• Fecha y código de reserva\n• Número de habitación en la que dormiste"],
     ],
 ];
@@ -77,8 +77,9 @@ $items = [
 $nodes = ['main' => ['title' => 'Menú principal', 'children' => array_keys($categories)]];
 foreach ($categories as $id => $title) {
     $nodes[$id] = ['title' => $title, 'children' => array_column($items[$id], 0)];
-    foreach ($items[$id] as [$itemId, $itemTitle, $answer]) {
-        $nodes[$itemId] = ['title' => $itemTitle, 'answer' => $answer, 'parent' => $id];
+    foreach ($items[$id] as $item) {
+        [$itemId, $itemTitle, $answer] = $item;
+        $nodes[$itemId] = ['title' => $itemTitle, 'answer' => $answer, 'parent' => $id, 'send_alert' => (bool) ($item[3] ?? false)];
     }
 }
 

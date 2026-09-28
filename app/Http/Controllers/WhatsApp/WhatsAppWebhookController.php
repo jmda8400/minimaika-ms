@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\WhatsApp;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SendWhatsAppClaimAlert;
 use App\Services\Bot\BotSettingsService;
 use App\Services\Bot\NavigationTreeService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
+use App\Services\WhatsApp\WhatsAppNotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +20,7 @@ class WhatsAppWebhookController extends Controller
         private readonly NavigationTreeService $navigation,
         private readonly WhatsAppGatewayService $whatsAppGatewayService,
         private readonly BotSettingsService $settingsService,
+        private readonly WhatsAppNotificationService $notifications,
     ) {
     }
 
@@ -54,7 +55,7 @@ class WhatsAppWebhookController extends Controller
                 $response = $this->navigation->navigate($selection);
                 if ($response['kind'] === 'answer') {
                     $this->whatsAppGatewayService->sendText($message['phone'], $response['text']);
-                    $this->dispatchClaimAlert($response['id'], $message);
+                    $this->sendOptionAlert($response, $message);
                     $menu = $this->navigation->menu($response['parent']);
                     $this->sendNavigationMenu($message['phone'], $this->navigation->followUp(), $menu);
 
@@ -176,27 +177,26 @@ class WhatsAppWebhookController extends Controller
     }
 
     /**
+     * @param array{id:string,title:string,parent_title:string,send_alert:bool} $response
      * @param array{customer_phone:string,is_group:bool,instance_id:string,message_id:?string} $message
      */
-    private function dispatchClaimAlert(string $selection, array $message): void
+    private function sendOptionAlert(array $response, array $message): void
     {
         $settings = $this->settingsService->get();
-        if ($message['is_group'] || ! $settings['notifications_enabled'] || $settings['notification_group_id'] === '') {
-            return;
-        }
-
-        $selectionId = str_starts_with($selection, 'nav:') ? substr($selection, 4) : $selection;
-        if (! in_array($selectionId, ['booking_claim', 'missing_voucher'], true)) {
+        if (! $response['send_alert'] || $message['is_group'] || ! $settings['notifications_enabled'] || $settings['notification_group_id'] === '') {
             return;
         }
 
         try {
-            // Claim alerts are part of the webhook response path so they must not
-            // depend on a separately running queue worker to reach the group.
-            SendWhatsAppClaimAlert::dispatchSync($selectionId, $message['customer_phone']);
+            $this->notifications->sendOptionAlert(
+                $response['id'],
+                $response['title'],
+                $response['parent_title'],
+                $message['customer_phone'],
+            );
         } catch (Throwable $exception) {
             Log::error('No se pudo enviar la alerta administrativa de WhatsApp.', [
-                'selection' => $selectionId,
+                'selection' => $response['id'],
                 'message' => $exception->getMessage(),
             ]);
         }

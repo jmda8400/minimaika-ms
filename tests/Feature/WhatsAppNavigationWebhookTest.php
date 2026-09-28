@@ -96,7 +96,10 @@ class WhatsAppNavigationWebhookTest extends TestCase
         Http::assertSentCount(3);
         Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/message/sendButtons/'));
         Http::assertSent(fn ($request): bool => str_contains((string) $request['text'], '1. Tarifas y menú')
-            && str_contains((string) $request['text'], 'Respondé con el número'));
+            && str_contains((string) $request['text'], 'Respondé con el número')
+            && ! str_contains((string) $request['text'], 'A1')
+            && ! str_contains((string) $request['text'], 'Ayuda')
+            && ! str_contains((string) $request['text'], 'Advertencia'));
         Http::assertSent(fn ($request): bool => str_contains((string) $request['text'], 'Servicios')
             && str_contains((string) $request['text'], '1. Acampe'));
     }

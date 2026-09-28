@@ -34,6 +34,16 @@ class WhatsAppNotificationService
         return $this->sendToConfiguredGroup("⚠️ *Reclamo recibido*\nEl cliente de número de teléfono {$formattedPhone} {$problem}.");
     }
 
+    public function sendOptionAlert(string $optionId, string $optionTitle, string $categoryTitle, string $customerPhone): bool
+    {
+        $phone = preg_replace('/\D+/', '', $customerPhone) ?? '';
+        $formattedPhone = $phone === '' ? 'desconocido' : '+'.$phone;
+
+        return $this->sendToConfiguredGroup(
+            "⚠️ *Reclamo recibido*\n\nCliente: {$formattedPhone}\nCategoría: {$categoryTitle}\nOpción: {$optionTitle}\nID: {$optionId}",
+        );
+    }
+
     public function sendHeartbeat(bool $force = false): bool
     {
         $settings = $this->settingsService->get();

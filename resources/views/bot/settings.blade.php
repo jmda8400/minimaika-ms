@@ -203,6 +203,10 @@
                                             </div>
                                             <label>Respuesta</label>
                                             <textarea data-field="option-answer" required>{{ $option['answer'] }}</textarea>
+                                            <label class="checkbox">
+                                                <input type="checkbox" data-field="option-send-alert" value="1" @checked((bool) ($option['send_alert'] ?? false))>
+                                                <span><strong>Avisar al grupo cuando el cliente elija esta opción</strong></span>
+                                            </label>
                                         </div>
                                     @endforeach
                                 </div>
@@ -229,7 +233,7 @@
 </body>
 <script>
     const categories = document.getElementById('categories');
-    const answerHtml = () => `<div class="answer"><input type="hidden" data-field="option-id" value=""><div class="answer-head"><div><label>Nombre de la opción</label><input type="text" data-field="option-title" required></div><button class="button-danger small-button remove-option" type="button">Eliminar</button></div><label>Respuesta</label><textarea data-field="option-answer" required></textarea></div>`;
+    const answerHtml = () => `<div class="answer"><input type="hidden" data-field="option-id" value=""><div class="answer-head"><div><label>Nombre de la opción</label><input type="text" data-field="option-title" required></div><button class="button-danger small-button remove-option" type="button">Eliminar</button></div><label>Respuesta</label><textarea data-field="option-answer" required></textarea><label class="checkbox"><input type="checkbox" data-field="option-send-alert" value="1"><span><strong>Avisar al grupo cuando el cliente elija esta opción</strong></span></label></div>`;
     const categoryHtml = () => `<article class="category"><input type="hidden" data-field="category-id" value=""><div class="category-head"><div><label>Categoría</label><input type="text" data-field="category-title" required></div><button class="button-danger small-button remove-category" type="button">Eliminar categoría</button></div><div class="answers">${answerHtml()}</div><button class="secondary small-button add-option" type="button">+ Agregar opción</button></article>`;
     function renameFields() {
         categories.querySelectorAll('.category').forEach((category, categoryIndex) => {
@@ -239,6 +243,7 @@
                 answer.querySelector('[data-field="option-id"]').name = `navigation[${categoryIndex}][options][${optionIndex}][id]`;
                 answer.querySelector('[data-field="option-title"]').name = `navigation[${categoryIndex}][options][${optionIndex}][title]`;
                 answer.querySelector('[data-field="option-answer"]').name = `navigation[${categoryIndex}][options][${optionIndex}][answer]`;
+                answer.querySelector('[data-field="option-send-alert"]').name = `navigation[${categoryIndex}][options][${optionIndex}][send_alert]`;
             });
         });
     }
