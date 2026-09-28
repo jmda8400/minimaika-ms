@@ -16,12 +16,22 @@ class WhatsAppNotificationService
     ) {
     }
 
-    public function sendHelpAlert(string $customerPhone): bool
+    public function sendClaim(string $selection, string $customerPhone): bool
     {
+        $problem = match ($selection) {
+            'booking_claim' => 'indica tener problemas con la reserva',
+            'missing_voucher' => 'indica no haber recibido el voucher',
+            default => null,
+        };
+
+        if ($problem === null) {
+            return false;
+        }
+
         $phone = preg_replace('/\D+/', '', $customerPhone) ?? '';
         $formattedPhone = $phone === '' ? 'desconocido' : '+'.$phone;
 
-        return $this->sendToConfiguredGroup("⚠️ *Solicitud de ayuda*\nEl cliente de número de teléfono {$formattedPhone} necesita ayuda.");
+        return $this->sendToConfiguredGroup("⚠️ *Reclamo recibido*\nEl cliente de número de teléfono {$formattedPhone} {$problem}.");
     }
 
     public function sendHeartbeat(bool $force = false): bool

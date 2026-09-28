@@ -3,15 +3,15 @@
 namespace App\Http\Controllers\WhatsApp;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SendWhatsAppHelpAlert;
+use App\Jobs\SendWhatsAppClaimAlert;
 use App\Services\Bot\BotSettingsService;
 use App\Services\Bot\NavigationTreeService;
 use App\Services\WhatsApp\WhatsAppGatewayService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 class WhatsAppWebhookController extends Controller
@@ -51,18 +51,10 @@ class WhatsAppWebhookController extends Controller
                     $message['text'],
                     Cache::get($this->navigationKey($message['phone']), []),
                 );
-                if (str_starts_with($selection, 'alert:')) {
-                    $sent = $this->dispatchHelpAlert($message);
-                    $confirmation = $sent
-                        ? '⚠️ Avisamos al equipo que necesitás ayuda.'
-                        : 'No pudimos enviar la advertencia. Por favor, comunicate directamente con el refugio.';
-                    $this->whatsAppGatewayService->sendText($message['phone'], $confirmation);
-
-                    return response()->json(['status' => 'sent']);
-                }
                 $response = $this->navigation->navigate($selection);
                 if ($response['kind'] === 'answer') {
                     $this->whatsAppGatewayService->sendText($message['phone'], $response['text']);
+                    $this->dispatchClaimAlert($response['id'], $message);
                     $menu = $this->navigation->menu($response['parent']);
                     $this->sendNavigationMenu($message['phone'], $this->navigation->followUp(), $menu);
 
@@ -110,14 +102,14 @@ class WhatsAppWebhookController extends Controller
             'rows' => count($menu['rows']),
         ]);
 
-        if ($strategy === 'text' || Cache::get($this->interactiveMenuFailureKey(), false)) {
+        if ($strategy === 'text' || count($menu['rows']) > 10 || Cache::get($this->interactiveMenuFailureKey(), false)) {
             $this->whatsAppGatewayService->sendText($phone, $this->navigation->textMenu($title, $menu['rows']));
 
             return;
         }
 
         try {
-            $this->whatsAppGatewayService->sendMenu($phone, $title, $menu['rows']);
+            $this->whatsAppGatewayService->sendMenu($phone, $title, $menu['button'], $menu['rows']);
         } catch (Throwable $exception) {
             Cache::put($this->interactiveMenuFailureKey(), true, now()->addMinutes(10));
             Log::warning('Se envía el menú textual porque falló el menú interactivo.', [
@@ -186,25 +178,27 @@ class WhatsAppWebhookController extends Controller
     /**
      * @param array{customer_phone:string,is_group:bool,instance_id:string,message_id:?string} $message
      */
-    private function dispatchHelpAlert(array $message): bool
+    private function dispatchClaimAlert(string $selection, array $message): void
     {
         $settings = $this->settingsService->get();
         if ($message['is_group'] || ! $settings['notifications_enabled'] || $settings['notification_group_id'] === '') {
-            return false;
+            return;
+        }
+
+        $selectionId = str_starts_with($selection, 'nav:') ? substr($selection, 4) : $selection;
+        if (! in_array($selectionId, ['booking_claim', 'missing_voucher'], true)) {
+            return;
         }
 
         try {
-            // Help alerts are part of the webhook response path so they must not
+            // Claim alerts are part of the webhook response path so they must not
             // depend on a separately running queue worker to reach the group.
-            SendWhatsAppHelpAlert::dispatchSync($message['customer_phone']);
-
-            return true;
+            SendWhatsAppClaimAlert::dispatchSync($selectionId, $message['customer_phone']);
         } catch (Throwable $exception) {
             Log::error('No se pudo enviar la alerta administrativa de WhatsApp.', [
+                'selection' => $selectionId,
                 'message' => $exception->getMessage(),
             ]);
-
-            return false;
         }
     }
 

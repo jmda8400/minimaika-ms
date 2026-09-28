@@ -31,7 +31,7 @@ class WhatsAppNavigationWebhookTest extends TestCase
 
         Http::assertSentCount(3);
         Http::assertSent(fn ($request): bool => str_contains($request->url(), '/message/sendButtons/rocca')
-            && count($request['buttons']) === 2
+            && count($request['buttons']) === 3
             && $request['buttons'][0] === [
                 'type' => 'reply',
                 'displayText' => 'Tarifas y menú',
@@ -59,17 +59,15 @@ class WhatsAppNavigationWebhookTest extends TestCase
             ],
         ])->assertOk()->assertJson(['status' => 'sent']);
 
-        Http::assertSentCount(11);
+        Http::assertSentCount(5);
 
         $buttonRequests = collect(Http::recorded())
             ->map(fn (array $pair) => $pair[0])
             ->filter(fn ($request): bool => str_contains($request->url(), '/message/sendButtons/rocca'));
 
-        $this->assertCount(10, $buttonRequests);
-        $this->assertSame(array_fill(0, 10, 2), $buttonRequests->map(fn ($request): int => count($request['buttons']))->values()->all());
+        $this->assertCount(4, $buttonRequests);
+        $this->assertSame([3, 3, 3, 1], $buttonRequests->map(fn ($request): int => count($request['buttons']))->values()->all());
         $this->assertSame('nav:claims', $buttonRequests->last()['buttons'][0]['id']);
-        $this->assertSame('alert:claims', $buttonRequests->last()['buttons'][1]['id']);
-        $this->assertSame('⚠️ Advertencia', $buttonRequests->last()['buttons'][1]['displayText']);
     }
 
     public function test_text_menu_is_the_default_and_numeric_reply_navigates(): void
@@ -98,7 +96,6 @@ class WhatsAppNavigationWebhookTest extends TestCase
         Http::assertSentCount(3);
         Http::assertNotSent(fn ($request): bool => str_contains($request->url(), '/message/sendButtons/'));
         Http::assertSent(fn ($request): bool => str_contains((string) $request['text'], '1. Tarifas y menú')
-            && str_contains((string) $request['text'], '⚠️ Ayuda: A1')
             && str_contains((string) $request['text'], 'Respondé con el número'));
         Http::assertSent(fn ($request): bool => str_contains((string) $request['text'], 'Servicios')
             && str_contains((string) $request['text'], '1. Acampe'));

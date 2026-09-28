@@ -71,28 +71,21 @@ class WhatsAppGatewayService
     }
 
     /** @param array<int,array{id:string,title:string,description:string}> $rows */
-    public function sendMenu(string $phone, string $title, array $rows): void
+    public function sendMenu(string $phone, string $title, string $button, array $rows): void
     {
-        foreach ($rows as $index => $row) {
-            $buttons = [[
-                'type' => 'reply',
-                'displayText' => mb_substr($row['title'], 0, 20),
-                'id' => $row['id'],
-            ]];
-            if ($row['id'] !== 'nav:main') {
-                $buttons[] = [
-                    'type' => 'reply',
-                    'displayText' => '⚠️ Advertencia',
-                    'id' => 'alert:'.substr($row['id'], 4),
-                ];
-            }
+        $groups = array_chunk($rows, 3);
 
+        foreach ($groups as $index => $group) {
             $response = $this->request()->post($this->url('message/sendButtons'), [
                 'number' => $phone,
-                'title' => $index === 0 ? $title : $row['title'],
+                'title' => $index === 0 ? $title : sprintf('%s (%d/%d)', $button, $index + 1, count($groups)),
                 'description' => 'Tocá una opción para continuar.',
                 'footer' => 'Refugio Agostino Rocca',
-                'buttons' => $buttons,
+                'buttons' => array_map(static fn (array $row): array => [
+                    'type' => 'reply',
+                    'displayText' => mb_substr($row['title'], 0, 20),
+                    'id' => $row['id'],
+                ], $group),
             ]);
 
             if ($response->failed()) {
@@ -101,9 +94,9 @@ class WhatsAppGatewayService
                     'status' => $response->status(),
                     'body' => $response->body(),
                     'instance' => (string) config('services.whatsapp_web.instance'),
-                    'buttons' => count($buttons),
+                    'buttons' => count($group),
                     'group' => $index + 1,
-                    'groups' => count($rows),
+                    'groups' => count($groups),
                 ]);
             }
 
