@@ -6,7 +6,7 @@ use App\Services\WhatsApp\WhatsAppNotificationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
-class SendWhatsAppClaimAlert implements ShouldQueue
+class SendWhatsAppHelpAlert implements ShouldQueue
 {
     use Queueable;
 
@@ -16,13 +16,12 @@ class SendWhatsAppClaimAlert implements ShouldQueue
     public array $backoff = [30, 120, 300, 900];
 
     public function __construct(
-        public readonly string $selection,
         public readonly string $customerPhone,
     ) {
     }
 
     public function handle(WhatsAppNotificationService $notifications): void
     {
-        $notifications->sendClaim($this->selection, $this->customerPhone);
+        $notifications->sendHelpAlert($this->customerPhone);
     }
 }

@@ -38,7 +38,7 @@ class WhatsAppNotificationsTest extends TestCase
             && $request['getParticipants'] === 'false');
     }
 
-    public function test_voucher_selection_immediately_sends_an_alert_with_the_customer_phone(): void
+    public function test_warning_button_for_any_option_immediately_sends_help_alert_with_customer_phone(): void
     {
         $this->storeNotificationSettings();
         Http::fake(['*' => Http::response(['ok' => true])]);
@@ -47,20 +47,20 @@ class WhatsAppNotificationsTest extends TestCase
             'instanceId' => 'rocca',
             'data' => [
                 'key' => ['fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net', 'id' => 'claim-1'],
-                'message' => ['conversation' => 'nav:missing_voucher'],
+                'message' => ['buttonsResponseMessage' => ['selectedButtonId' => 'alert:hot_water']],
             ],
         ];
 
         $this->postJson(route('whatsapp.webhook'), $payload)->assertOk()->assertJson(['status' => 'sent']);
         $this->postJson(route('whatsapp.webhook'), $payload)->assertOk()->assertJson(['status' => 'duplicate']);
 
-        Http::assertSentCount(3);
+        Http::assertSentCount(2);
         Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
             && str_contains($request['text'], '+5492944000000')
-            && str_contains($request['text'], 'no haber recibido el voucher'));
+            && str_contains($request['text'], 'necesita ayuda'));
     }
 
-    public function test_claim_selected_by_its_visible_button_text_sends_the_alert(): void
+    public function test_regular_option_does_not_send_a_help_alert(): void
     {
         $this->storeNotificationSettings();
         Http::fake(['*' => Http::response(['ok' => true])]);
@@ -69,26 +69,24 @@ class WhatsAppNotificationsTest extends TestCase
             'instanceId' => 'rocca',
             'data' => [
                 'key' => ['fromMe' => false, 'remoteJid' => '5492944000000@s.whatsapp.net', 'id' => 'claim-title'],
-                'message' => ['extendedTextMessage' => ['text' => 'Por reservas']],
+                'message' => ['extendedTextMessage' => ['text' => 'Agua caliente']],
             ],
         ])->assertOk()->assertJson(['status' => 'sent']);
 
-        Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
-            && str_contains($request['text'], '+5492944000000')
-            && str_contains($request['text'], 'problemas con la reserva'));
+        Http::assertNotSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us');
     }
 
-    public function test_claim_alert_is_sent_to_the_configured_group(): void
+    public function test_help_alert_is_sent_to_the_configured_group(): void
     {
         $this->storeNotificationSettings();
         Http::fake(['*' => Http::response(['ok' => true])]);
 
-        $sent = app(WhatsAppNotificationService::class)->sendClaim('booking_claim', '5492944000000');
+        $sent = app(WhatsAppNotificationService::class)->sendHelpAlert('5492944000000');
 
         $this->assertTrue($sent);
         Http::assertSent(fn ($request): bool => $request['number'] === '120363000000000000@g.us'
             && str_contains($request['text'], '+5492944000000')
-            && str_contains($request['text'], 'indica tener problemas con la reserva'));
+            && str_contains($request['text'], 'necesita ayuda'));
     }
 
     public function test_forced_heartbeat_only_reports_a_connected_session(): void

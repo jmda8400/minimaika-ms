@@ -64,8 +64,11 @@ class NavigationTreeServiceTest extends TestCase
         $ids = array_column($menu['rows'], 'id');
 
         $this->assertStringContainsString("1. Pago en dólares", $text);
+        $this->assertStringContainsString('⚠️ Ayuda: A1', $text);
         $this->assertStringContainsString('Respondé con el número', $text);
         $this->assertSame('nav:dollars', $service->resolveNumber('1', $ids));
+        $this->assertSame('alert:dollars', $service->resolveNumber('A1', $ids));
+        $this->assertSame('alert:payment_methods', $service->resolveNumber('⚠️ Ayuda: A2', $ids));
         $this->assertSame('99', $service->resolveNumber('99', $ids));
     }
 
