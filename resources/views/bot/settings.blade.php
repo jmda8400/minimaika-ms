@@ -6,6 +6,7 @@
     <title>Configuración del bot</title>
     <style>
         body{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#111827;color:#e5e7eb}.wrap{max-width:980px;margin:0 auto;padding:40px 20px}.card{background:#1f2937;border:1px solid #374151;border-radius:20px;box-shadow:0 16px 45px #00000052;padding:32px}.eyebrow{color:#9ca3af;font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:12px}h1{font-size:34px;line-height:1.1;margin:8px 0 12px}.field{border-top:1px solid #374151;margin-top:26px;padding-top:26px}label{display:block;font-weight:750;margin-bottom:8px}.hint{color:#cbd5e1;font-size:14px;line-height:1.5;margin:6px 0 0}.options{display:grid;gap:12px;margin-top:14px}.option{background:#111827;border:1px solid #4b5563;border-radius:14px;padding:16px;display:flex;gap:12px;align-items:flex-start}.option input{margin-top:4px}textarea,input[type=text],input[type=time],select{width:100%;box-sizing:border-box;background:#111827;color:#e5e7eb;border:1px solid #4b5563;border-radius:14px;padding:14px}textarea{min-height:120px;resize:vertical}textarea:focus,input:focus,select:focus{outline:2px solid #6b7280;outline-offset:2px}.checkbox{display:flex;gap:12px;align-items:flex-start}.actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:28px}button{background:#4b5563;color:white;border:0;border-radius:999px;padding:12px 20px;font-weight:800;cursor:pointer}button:hover{background:#6b7280}.button-danger{background:#7f1d1d}.button-danger:hover{background:#991b1b}.button-link{display:inline-block;background:#4b5563;color:white;border:0;border-radius:999px;padding:12px 20px;font-weight:800;text-decoration:none}.button-link:hover{background:#6b7280}.link{color:#d1d5db;text-decoration:none;font-weight:700}.alert{background:#263244;color:#e5e7eb;border:1px solid #4b5563;border-radius:14px;padding:14px;margin:20px 0}.error{color:#fca5a5;font-size:14px;margin-top:8px}.summary{background:#111827;border:1px solid #374151;border-radius:16px;padding:16px;margin-top:22px}.summary strong{display:block;margin-bottom:6px}.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}.status-pill{display:inline-flex;align-items:center;gap:8px;border-radius:999px;background:#374151;color:#f3f4f6;padding:8px 12px;font-weight:800}.status-dot{width:9px;height:9px;border-radius:50%;background:#6ee7b7}.status-dot.offline{background:#f59e0b}.qr{max-width:300px;width:100%;height:auto;display:block;margin:16px 0}.code{box-sizing:border-box;max-width:100%;font:700 22px ui-monospace,Menlo,monospace;letter-spacing:2px;line-height:1.35;overflow-wrap:anywhere;word-break:break-word;background:#0f172a;border:1px solid #374151;border-radius:12px;padding:12px;color:#f8fafc}.json{background:#0f172a;color:#f7fafc;border:1px solid #374151;border-radius:14px;overflow:auto;padding:14px;white-space:pre-wrap}.inline-form{display:inline}.top-actions{display:flex;gap:12px;align-items:center;margin-bottom:26px;padding-bottom:26px;border-bottom:1px solid #374151}.top-actions .button-link,.top-actions button{white-space:nowrap}.text-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.text-grid .wide{grid-column:1/-1}.category{background:#111827;border:1px solid #4b5563;border-radius:18px;padding:20px;margin-top:18px}.category-head,.answer-head{display:flex;gap:12px;align-items:end}.category-head>div,.answer-head>div{flex:1}.answers{display:grid;gap:14px;margin-top:16px}.answer{border-left:3px solid #4b5563;padding-left:16px}.small-button{padding:9px 14px;font-size:13px}.secondary{background:#334155}.section-title{margin:0 0 6px}.meta{display:grid;gap:5px;margin-top:14px}@media(max-width:700px){.text-grid{grid-template-columns:1fr}.category-head,.answer-head{align-items:stretch;flex-direction:column}.card{padding:22px}.top-actions{align-items:stretch;flex-direction:column}}
+        .item-actions{display:flex;gap:8px;flex-wrap:wrap}.category-head>.item-actions,.answer-head>.item-actions{flex:0 1 auto}button:disabled{opacity:.45;cursor:not-allowed}button:disabled:hover{background:#334155}button:focus-visible{outline:2px solid #e5e7eb;outline-offset:3px}
     </style>
 </head>
 <body>
@@ -184,14 +185,18 @@
 
                 <div class="field">
                     <h2 class="section-title">Opciones y respuestas</h2>
-                    <p class="hint">Podés cambiar títulos y respuestas, sumar categorías y agregar o eliminar opciones. El orden de esta lista será el orden que verá la persona en WhatsApp.</p>
+                    <p class="hint">Podés cambiar títulos y respuestas, sumar categorías y agregar o eliminar opciones. Usá Subir y Bajar para cambiar el orden. Al guardar la configuración, los próximos menús de WhatsApp mostrarán las categorías y opciones en ese orden.</p>
                     <div id="categories">
                         @foreach (old('navigation', $settings['navigation']) as $categoryIndex => $category)
                             <article class="category">
                                 <input type="hidden" data-field="category-id" value="{{ $category['id'] ?? '' }}">
                                 <div class="category-head">
                                     <div><label>Categoría</label><input type="text" data-field="category-title" value="{{ $category['title'] }}" required></div>
-                                    <button class="button-danger small-button remove-category" type="button">Eliminar categoría</button>
+                                    <div class="item-actions">
+                                        <button class="secondary small-button" type="button" data-move="up" data-item="category" aria-label="Subir categoría">↑ Subir</button>
+                                        <button class="secondary small-button" type="button" data-move="down" data-item="category" aria-label="Bajar categoría">↓ Bajar</button>
+                                        <button class="button-danger small-button remove-category" type="button">Eliminar categoría</button>
+                                    </div>
                                 </div>
                                 <div class="answers">
                                     @foreach ($category['options'] as $option)
@@ -199,7 +204,11 @@
                                             <input type="hidden" data-field="option-id" value="{{ $option['id'] ?? '' }}">
                                             <div class="answer-head">
                                                 <div><label>Nombre de la opción</label><input type="text" data-field="option-title" value="{{ $option['title'] }}" required></div>
-                                                <button class="button-danger small-button remove-option" type="button">Eliminar</button>
+                                                <div class="item-actions">
+                                                    <button class="secondary small-button" type="button" data-move="up" data-item="answer" aria-label="Subir opción">↑ Subir</button>
+                                                    <button class="secondary small-button" type="button" data-move="down" data-item="answer" aria-label="Bajar opción">↓ Bajar</button>
+                                                    <button class="button-danger small-button remove-option" type="button">Eliminar</button>
+                                                </div>
                                             </div>
                                             <label>Respuesta</label>
                                             <textarea data-field="option-answer" required>{{ $option['answer'] }}</textarea>
@@ -233,8 +242,9 @@
 </body>
 <script>
     const categories = document.getElementById('categories');
-    const answerHtml = () => `<div class="answer"><input type="hidden" data-field="option-id" value=""><div class="answer-head"><div><label>Nombre de la opción</label><input type="text" data-field="option-title" required></div><button class="button-danger small-button remove-option" type="button">Eliminar</button></div><label>Respuesta</label><textarea data-field="option-answer" required></textarea><label class="checkbox"><input type="checkbox" data-field="option-send-alert" value="1"><span><strong>Avisar al grupo cuando el cliente elija esta opción</strong></span></label></div>`;
-    const categoryHtml = () => `<article class="category"><input type="hidden" data-field="category-id" value=""><div class="category-head"><div><label>Categoría</label><input type="text" data-field="category-title" required></div><button class="button-danger small-button remove-category" type="button">Eliminar categoría</button></div><div class="answers">${answerHtml()}</div><button class="secondary small-button add-option" type="button">+ Agregar opción</button></article>`;
+    const moveButtonsHtml = (item, label) => `<button class="secondary small-button" type="button" data-move="up" data-item="${item}" aria-label="Subir ${label}">↑ Subir</button><button class="secondary small-button" type="button" data-move="down" data-item="${item}" aria-label="Bajar ${label}">↓ Bajar</button>`;
+    const answerHtml = () => `<div class="answer"><input type="hidden" data-field="option-id" value=""><div class="answer-head"><div><label>Nombre de la opción</label><input type="text" data-field="option-title" required></div><div class="item-actions">${moveButtonsHtml('answer', 'opción')}<button class="button-danger small-button remove-option" type="button">Eliminar</button></div></div><label>Respuesta</label><textarea data-field="option-answer" required></textarea><label class="checkbox"><input type="checkbox" data-field="option-send-alert" value="1"><span><strong>Avisar al grupo cuando el cliente elija esta opción</strong></span></label></div>`;
+    const categoryHtml = () => `<article class="category"><input type="hidden" data-field="category-id" value=""><div class="category-head"><div><label>Categoría</label><input type="text" data-field="category-title" required></div><div class="item-actions">${moveButtonsHtml('category', 'categoría')}<button class="button-danger small-button remove-category" type="button">Eliminar categoría</button></div></div><div class="answers">${answerHtml()}</div><button class="secondary small-button add-option" type="button">+ Agregar opción</button></article>`;
     function renameFields() {
         categories.querySelectorAll('.category').forEach((category, categoryIndex) => {
             category.querySelector('[data-field="category-id"]').name = `navigation[${categoryIndex}][id]`;
@@ -246,13 +256,32 @@
                 answer.querySelector('[data-field="option-send-alert"]').name = `navigation[${categoryIndex}][options][${optionIndex}][send_alert]`;
             });
         });
+        categories.querySelectorAll('[data-move]').forEach(button => {
+            const item = button.closest(`.${button.dataset.item}`);
+            button.disabled = button.dataset.move === 'up' ? !item.previousElementSibling : !item.nextElementSibling;
+        });
     }
     document.getElementById('add-category').addEventListener('click', () => { categories.insertAdjacentHTML('beforeend', categoryHtml()); renameFields(); });
     categories.addEventListener('click', event => {
-        if (event.target.matches('.add-option')) event.target.closest('.category').querySelector('.answers').insertAdjacentHTML('beforeend', answerHtml());
-        if (event.target.matches('.remove-option') && event.target.closest('.answers').children.length > 1) event.target.closest('.answer').remove();
-        if (event.target.matches('.remove-category') && categories.children.length > 1) event.target.closest('.category').remove();
+        const button = event.target.closest('button');
+        if (!button || button.disabled) return;
+        if (button.matches('[data-move]')) {
+            const item = button.closest(`.${button.dataset.item}`);
+            const sibling = button.dataset.move === 'up' ? item.previousElementSibling : item.nextElementSibling;
+            if (sibling) {
+                if (button.dataset.move === 'up') item.parentElement.insertBefore(item, sibling);
+                else item.parentElement.insertBefore(sibling, item);
+            }
+        }
+        if (button.matches('.add-option')) button.closest('.category').querySelector('.answers').insertAdjacentHTML('beforeend', answerHtml());
+        if (button.matches('.remove-option') && button.closest('.answers').children.length > 1) button.closest('.answer').remove();
+        if (button.matches('.remove-category') && categories.children.length > 1) button.closest('.category').remove();
         renameFields();
+        if (button.matches('[data-move]')) {
+            const item = button.closest(`.${button.dataset.item}`);
+            const focusTarget = button.disabled ? item.querySelector('[data-move]:not(:disabled)') : button;
+            focusTarget?.focus();
+        }
     });
     renameFields();
     const groupSelect = document.getElementById('notification_group_id');
